@@ -40,4 +40,6 @@ def save_census_data():
     acs_17 = compile_census_data(acs_variables, 2017)
     acs_13 = compile_census_data(acs_variables, 2013)
     acs_17.to_csv('acs_17.csv')
+    print('saved 17')
     acs_13.to_csv('acs_13.csv')
+    print('saved 13')
