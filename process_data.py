@@ -153,8 +153,12 @@ def check_alive(df, date):
 
     Outputs: None
     '''
+    df["status"] = np.nan
     for account in df['ACCOUNT NUMBER'].unique():
-        df['status'] = np.where(df[df['ACCOUNT NUMBER'] == account]['LICENSE TERM EXPIRATION DATE'].max() < date, 1, 0)
+        if np.where(df[df['ACCOUNT NUMBER'] == account]['LICENSE TERM EXPIRATION DATE'].max() < date, 0, 1) == 1:
+            df.loc[df['ACCOUNT NUMBER'] ==  account, 'status'] = 1
+        else:
+            df.loc[df['ACCOUNT NUMBER'] ==  account, 'status'] = 0
 
 
 def make_dummy_cat(dataframe, col_lst):
