@@ -31,10 +31,10 @@ def read(csv_filename, index='projectid'):
     Outputs: a pandas dataframe
     '''
     business = process_data.process_business()
-    blocks = process_data.process_blocks()
-    
-    joined = process_data.join_with_block_groups(business, blocks)
-    
+    #blocks = process_data.process_blocks()
+    #census = 
+    #joined = process_data.join_with_block_groups(business, blocks)
+    return business
     
     
 
