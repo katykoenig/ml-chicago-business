@@ -131,6 +131,7 @@ def process_business():
                      parse_dates=['APPLICATION REQUIREMENTS COMPLETE',
                      'LICENSE TERM START DATE', 'LICENSE STATUS',
                      'LICENSE TERM EXPIRATION DATE', 'DATE ISSUED'], infer_datetime_format=True)
+    df['unique_id'] = df['ACCOUNT NUMBER'].astype('str') + '-' + df['SITE NUMBER'].astype('str')
     #find_duration(df, 'DATE ISSUED', 'APPLICATION REQUIREMENTS COMPLETE')
     return df
 
