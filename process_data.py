@@ -110,15 +110,13 @@ def process_census(acs_csv):
     return df[desired_cols]
 
 
-cols_to_use = ['ACCOUNT NUMBER', 'SITE NUMBER', 'LICENSE CODE', 'ADDRESS', 
-               'APPLICATION TYPE', 'SSA', 'APPLICATION REQUIREMENTS COMPLETE',
-               'LICENSE TERM START DATE', 'LICENSE STATUS',
-               'LICENSE TERM EXPIRATION DATE', 'DATE ISSUED']
+
 col_types = {'ACCOUNT NUMBER': str, 'SITE NUMBER': int, 'LICENSE CODE': str,
              'ADDRESS': str, 'APPLICATION TYPE': str, 
              'APPLICATION REQUIREMENTS COMPLETE': str,
                'LICENSE TERM START DATE':str , 'LICENSE STATUS' : str,
-               'LICENSE TERM EXPIRATION DATE': str, 'DATE ISSUED': str}
+               'LICENSE TERM EXPIRATION DATE': str, 'DATE ISSUED': str,
+               'LONGITUDE': str, 'LATITUDE': str}
 
 def process_business():
     '''
@@ -129,10 +127,10 @@ def process_business():
 
     Outputs: a pandas dataframe
     '''
-    df = pd.read_csv('business.csv', usecols=cols_to_use, dtype=col_types,
+    df = pd.read_csv('business.csv', usecols=list(col_types.keys()), dtype=col_types,
                      parse_dates=['APPLICATION REQUIREMENTS COMPLETE',
                      'LICENSE TERM START DATE', 'LICENSE STATUS',
-                     'LICENSE TERM EXPIRATION DATE', 'DATE ISSUED'])
+                     'LICENSE TERM EXPIRATION DATE', 'DATE ISSUED'], infer_datetime_format=True)
     #find_duration(df, 'DATE ISSUED', 'APPLICATION REQUIREMENTS COMPLETE')
     return df
 
@@ -214,14 +212,6 @@ def join_with_block_groups(business_df, blocks_df):
     joined_data = gpd.sjoin(business_gdf, blocks_df[["block_group", "the_geom"]]).drop(columns="index_right")
     return joined_data
 
-
-def working(business_df, blocks_df, census_df):
-    '''
-    '''
-    joined = join_with_block_groups(business_df, blocks_df)
-    full = pd.merge(joined, census_df, on='block_group')
-
-
 def find_num_bus(df):
     '''
     Finds current number of businesses within a block group
@@ -246,31 +236,3 @@ def breakdown_by_blck_grp(df, col):
 
 # do we want to include anything not issue/renew?
 # we could also do axis=0 for the .sum to get a comparison across block groups
-
-
-
-'''    
-new_bus_dict = {}
-new_bus_dict['type'] = ['Percentage of New Applications']
-prev_year = 2002
-for year in year_lst:
-    last_year = set(augmented_df[(augmented_df['date_issued'].dt.year == prev_year) & (augmented_df['application_type'] == 'ISSUE')]['account_number'])
-    this_year = set(augmented_df[(augmented_df['date_issued'].dt.year == year) & (augmented_df['application_type'] == 'ISSUE')]['account_number'])
-    diff = len(this_year) - len(last_year)
-    new_bus_dict[year] = [diff*100 / len(last_year)]
-    prev_year = year
-
-new_bus = pd.DataFrame.from_dict(new_bus_dict)
-
-renewals_dict = {}
-renewals_dict['type'] = ['Percentage of Renewals']
-prev_year = 2002
-for year in year_lst:
-    last_year = set(augmented_df[(augmented_df['date_issued'].dt.year == prev_year) & (augmented_df['application_type'] == 'RENEW')]['account_number'])
-    this_year = set(augmented_df[(augmented_df['date_issued'].dt.year == year) & (augmented_df['application_type'] == 'RENEW')]['account_number'])
-    diff = len(this_year) - len(last_year)
-    renewals_dict[year] = [diff*100 / len(last_year)]
-    prev_year = year
-
-renewals = pd.DataFrame.from_dict(renewals_dict)
-'''
