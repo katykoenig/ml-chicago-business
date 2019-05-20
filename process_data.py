@@ -8,6 +8,13 @@ from dateutil.relativedelta import relativedelta
 
 def process_census(acs_csv):
     '''
+    Reads in the ACS census data from csv, creating bins for specified features
+    and finds percentages for these features
+
+    Inputs: 
+        acs_csv: a csv of American Community Survey data
+
+    Output: a pandas dataframe of desired ACS columns
     '''
     df = pd.read_csv(acs_csv)
     total_male = 'Estimate!!Total!!Male'
@@ -107,43 +114,38 @@ cols_to_use = ['ACCOUNT NUMBER', 'SITE NUMBER', 'LICENSE CODE', 'ADDRESS',
                'APPLICATION TYPE', 'SSA', 'APPLICATION REQUIREMENTS COMPLETE',
                'LICENSE TERM START DATE', 'LICENSE STATUS',
                'LICENSE TERM EXPIRATION DATE', 'DATE ISSUED']
+col_types = {'ACCOUNT NUMBER': str, 'SITE NUMBER': int, 'LICENSE CODE': str,
+             'ADDRESS': str, 'APPLICATION TYPE': str, 
+             'APPLICATION REQUIREMENTS COMPLETE': str,
+               'LICENSE TERM START DATE':str , 'LICENSE STATUS' : str,
+               'LICENSE TERM EXPIRATION DATE': str, 'DATE ISSUED': str}
+
 def process_business():
     '''
+    Reads in business license csv and specifies necessary columns and their
+    types
+
+    Inputs: None
+
+    Outputs: a pandas dataframe
     '''
-    df = pd.read_csv('business.csv')
-    for col in df.columns:
-        if "date" in col:
-            df[col] = pd.to_datetime(df[col])
-    to_drop_lst = []
-    for col in df.columns:
-      if "computed" in col:
-        to_drop_lst.append(col)
-    df.drop(to_drop_lst, axis=1, inplace=True)
-    change_date_type(df)
-    find_duration(df, 'DATE ISSUED', 'APPLICATION REQUIREMENTS COMPLETE')
+    df = pd.read_csv('business.csv', usecols=cols_to_use, dtype=col_types,
+                     parse_dates=['APPLICATION REQUIREMENTS COMPLETE',
+                     'LICENSE TERM START DATE', 'LICENSE STATUS',
+                     'LICENSE TERM EXPIRATION DATE', 'DATE ISSUED'])
+    #find_duration(df, 'DATE ISSUED', 'APPLICATION REQUIREMENTS COMPLETE')
     return df
-
-
-def change_date_type(dataframe):
-    '''
-    Converts columns with dates to datetime objects
-
-    Inputs: a pandas dataframe
-
-    Outputs: None
-    '''
-    for col in dataframe.columns: 
-        if "DATE" in col:
-            dataframe[col] = pd.to_datetime(dataframe[col])
-        if col in ['APPLICATION CREATED DATE', 
-                   'APPLICATION REQUIREMENTS COMPLETE',
-                   'LICENSE APPROVED FOR ISSUANCE']:
-            dataframe[col] = pd.to_datetime(dataframe[col])
 
 
 def find_duration(df, col1, col2):
     '''
     Calculates the amount of days that have passed between two columns
+
+    Inputs: 
+        df: a pandas dataframe
+        col1: column name of dataframe
+        col2: column name of dataframe
+
     '''
     diff = df[col2] - df[col1]
     df['days_between_' + col1 + "_" + col2] = diff.dt.days
@@ -151,18 +153,23 @@ def find_duration(df, col1, col2):
 
 def check_alive(df, date):
     '''
-    Checks to see if business still open after given date
-    0: closed
-    1: open
+    Checks to see if business still open after given date and gives the
+    following encoding for a new column in the dataframe ('status'):
+        0: closed
+        1: open
+    
+    Inputs:
+        df: a pandas dataframe
+        date: a datetime object
 
     Outputs: None
     '''
     df["status"] = np.nan
     for account in df['ACCOUNT NUMBER'].unique():
         if np.where(df[df['ACCOUNT NUMBER'] == account]['LICENSE TERM EXPIRATION DATE'].max() < date, 0, 1) == 1:
-            df.loc[df['ACCOUNT NUMBER'] ==  account, 'status'] = 1
+            df.loc[df['ACCOUNT NUMBER'] == account, 'status'] = 1
         else:
-            df.loc[df['ACCOUNT NUMBER'] ==  account, 'status'] = 0
+            df.loc[df['ACCOUNT NUMBER'] == account, 'status'] = 0
 
 
 def make_dummy_cat(dataframe, col_lst):
@@ -187,6 +194,7 @@ def make_dummy_cat(dataframe, col_lst):
 
 def process_blocks():
     '''
+
     '''
     df = pd.read_csv('blocks.csv')
     df['GEOID10'] = df['GEOID10'].astype(str)
