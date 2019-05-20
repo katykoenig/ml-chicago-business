@@ -214,7 +214,27 @@ def find_num_bus(df):
     '''
     Finds current number of businesses within a block group
     '''
-    df.groupby('block_group').count('status')
+    df["num_open_bus"] = np.nan
+    for group in df['block_group'].unique():
+        cnt = df[(df['block_group'] == group)]['status'].value_counts()
+        df.loc[df['block_group'] ==  group, 'num_open_bus'] = cnt[1]
+
+
+COLUMN_NAMES = ['APPLICATION TYPE',  'LICENSE DESCRIPTION']
+def breakdown_by_blck_grp(df, col):
+    '''
+    Finds percentage breakdown for each type of a given column for each block group 
+    e.g. what's the percentage of renewals in this blk group?
+    '''
+    val_lst = list(df[col].unique())
+    grouped = df.groupby('block_group')[col].value_counts().unstack(fill_value=0)
+    pct = grouped[val_lst].div(grouped.sum(axis=1), axis=0)*100
+    return pct.reset_index()
+
+
+# do we want to include anything not issue/renew?
+# we could also do axis=0 for the .sum to get a comparison across block groups
+
 
 
 '''    
