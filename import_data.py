@@ -18,6 +18,8 @@ def get_chicago_data():
     for key, val in URLS.items():
         df = pd.read_csv(val)
         print(key, 'download complete')
+        if key == 'business':
+            df = df[df['CITY'] == 'CHICAGO']
         df.to_csv(key + '.csv')
         print(key, 'saved')
 
