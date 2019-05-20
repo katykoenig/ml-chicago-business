@@ -103,6 +103,10 @@ def process_census(acs_csv):
     return df[desired_cols]
 
 
+cols_to_use = ['ACCOUNT NUMBER', 'SITE NUMBER', 'LICENSE CODE', 'ADDRESS', 
+               'APPLICATION TYPE', 'SSA', 'APPLICATION REQUIREMENTS COMPLETE',
+               'LICENSE TERM START DATE', 'LICENSE STATUS',
+               'LICENSE TERM EXPIRATION DATE', 'DATE ISSUED']
 def process_business():
     '''
     '''
