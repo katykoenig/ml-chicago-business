@@ -171,6 +171,17 @@ def check_alive(df, date):
             df.loc[df['ACCOUNT NUMBER'] == account, 'status'] = 0
 
 
+def survive_two_years(df):
+    '''
+    '''
+    df['exists_2_yrs'] = np.nan
+    for account in df['ACCOUNT NUMBER'].unique():
+        if np.where(df[df['ACCOUNT NUMBER'] == account]['LICENSE TERM EXPIRATION DATE'].max() < (df['DATE ISSUED'] + np.timedelta64(2, 'Y')), 0, 1) == 1:
+            df.loc[df['ACCOUNT NUMBER'] == account, 'exists_2_yrs'] = 1
+        else:
+            df.loc[df['ACCOUNT NUMBER'] == account, 'exists_2_yrs'] = 0   
+
+
 def make_dummy_cat(dataframe, col_lst):
     '''
     Creates new columns of dummy variables from categorical columns of the data
