@@ -132,8 +132,30 @@ def process_business():
                      'LICENSE TERM START DATE', 'LICENSE STATUS',
                      'LICENSE TERM EXPIRATION DATE', 'DATE ISSUED'], infer_datetime_format=True)
     df['unique_id'] = df['ACCOUNT NUMBER'].astype('str') + '-' + df['SITE NUMBER'].astype('str')
+    df = df.set_index('unique_id')
     #find_duration(df, 'DATE ISSUED', 'APPLICATION REQUIREMENTS COMPLETE')
     return df
+
+
+def tmp(inputdf):
+    ##smalldf
+    counts = inputdf.groupby('unique_id').size()
+    small_indx = counts[counts.values <= 5].index
+    minidf = inputdf[inputdf['unique_id'].isin(small_indx)]
+    to_write = {}
+    for i, df in minidf.groupby('unique_id'):
+        #if address doesn't change
+        #store entry and permits
+        
+        #if address changes
+        #? and permits
+        pass        
+        '''
+        cur = {}
+        if df['ADDRESS'].unique().size == 1:
+            cur['ADDRESS'] = 
+        to_write[i] = 
+        '''
 
 
 def find_duration(df, col1, col2):
