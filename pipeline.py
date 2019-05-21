@@ -17,37 +17,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_curve, roc_auc_score, f1_score, precision_score, recall_score, accuracy_score as accuracy, precision_recall_curve
 from sklearn.ensemble import BaggingClassifier, RandomForestClassifier, GradientBoostingClassifier, AdaBoostClassifier
 from dateutil.relativedelta import relativedelta
-
-import process_data
-
-def read(csv_filename, index='projectid'):
-    '''
-    Reads csv into a pandas dataframe
-
-    Inputs:
-        csv_filename: csv filename
-        index: column to be specified as index column when data read into pandas dataframe
-
-    Outputs: a pandas dataframe
-    '''
-    business = process_data.process_business()
-    #blocks = process_data.process_blocks()
-    #census = 
-    #joined = process_data.join_with_block_groups(business, blocks)
-    return business
-    
-    
-
-
-def check_null_values(dataframe):
-    '''
-    Counts the number of null values in each column of a dataframe
-
-    Input: a pandas dataframe
-
-    Output: a pandas series with the number of null values in each column
-    '''
-    return dataframe.isnull().sum(axis=0)
+import process_data as pr
 
 
 def temporal_validate(dataframe, col, window):
@@ -283,7 +253,6 @@ params_dict = {
                             'solver': ['lbfgs']},
     'decision_tree': {'criterion': ['gini', 'entropy'], 'max_depth': [5, 10],
                       'min_samples_split': [2, 5, 10]},
-    'SVM': {},
     'knn': {'n_neighbors': [5, 10, 25, 50], 'weights': ['uniform', 'distance']},
     'ada_boost': {'algorithm': ['SAMME.R'],
                   'n_estimators': [1, 10, 100, 1000]},
@@ -292,7 +261,6 @@ params_dict = {
 
 clfs = {'random_forest': RandomForestClassifier(),
         'logistic_regression': LogisticRegression(),
-        'SVM': svm.SVC(random_state=0),
         'decision_tree': DecisionTreeClassifier(),
         'knn': KNeighborsClassifier(),
         'ada_boost': AdaBoostClassifier(DecisionTreeClassifier(max_depth=5)),

@@ -114,7 +114,7 @@ def process_census(acs_csv):
 col_types = {'ACCOUNT NUMBER': str, 'SITE NUMBER': int, 'LICENSE CODE': str,
              'ADDRESS': str, 'APPLICATION TYPE': str, 
              'APPLICATION REQUIREMENTS COMPLETE': str,
-               'LICENSE TERM START DATE':str , 'LICENSE STATUS' : str,
+               'LICENSE TERM START DATE': str , 'LICENSE STATUS' : str,
                'LICENSE TERM EXPIRATION DATE': str, 'DATE ISSUED': str,
                'LONGITUDE': str, 'LATITUDE': str}
 
@@ -132,17 +132,34 @@ def process_business():
                      'LICENSE TERM START DATE', 'LICENSE STATUS',
                      'LICENSE TERM EXPIRATION DATE', 'DATE ISSUED'], infer_datetime_format=True)
     df['unique_id'] = df['ACCOUNT NUMBER'].astype('str') + '-' + df['SITE NUMBER'].astype('str')
-    df = df.set_index('unique_id')
     #find_duration(df, 'DATE ISSUED', 'APPLICATION REQUIREMENTS COMPLETE')
     return df
 
 
-def tmp(inputdf):
+def tmp(bus_df):
+    to_write = {new: [] for new in ['unique_id', 'latitude', 'longitude', 'earliest_date_issued', 'latest_date_issued', 'latest_exp_date']}  
+    top_codes = bus_df.groupby('LICENSE CODE').size().sort_values(ascending=False)[:20] 
+    for code in list(top_codes.index):
+        to_write[code] = []
+    for bus_id in bus_df['unique_id']:
+        to_write['unique_id'].append(bus_id)
+        relevant = bus_df[bus_df['unique_id'] == bus_id]
+        to_write['earliest_date_issued'].append(relevant['LICENSE TERM START DATE'].min())
+        to_write['latest_date_issued'].append(relevant['LICENSE TERM START DATE'].max())
+        to_write['latest_exp_date'].append(relevant['LICENSE TERM EXPIRATION DATE'].max())
+        to_write['latitude'].append(relevant['LATITUDE'].iloc[-1])
+        to_write['longitude'].append(relevant['LONGITUDE'].iloc[-1])
+        for code in list(top_codes.index):
+            if code in list(relevant['LICENSE CODE']):
+                to_write[code].append(1)
+            else:
+                to_write[code].append(0)
+    new_bus_df = pd.DataFrame.from_dict(to_write)
+    return new_bus_df
+
+
     ##smalldf
     counts = inputdf.groupby('unique_id').size()
-    small_indx = counts[counts.values <= 5].index
-    minidf = inputdf[inputdf['unique_id'].isin(small_indx)]
-    to_write = {}
     for i, df in minidf.groupby('unique_id'):
         #if address doesn't change
         #store entry and permits
@@ -202,26 +219,6 @@ def survive_two_years(df):
             df.loc[df['ACCOUNT NUMBER'] == account, 'exists_2_yrs'] = 1
         else:
             df.loc[df['ACCOUNT NUMBER'] == account, 'exists_2_yrs'] = 0   
-
-
-def make_dummy_cat(dataframe, col_lst):
-    '''
-    Creates new columns of dummy variables from categorical columns of the data
-
-    Inputs:
-        dataframe: a pandas dataframe
-        col_lst: list of columns to convert to dummy columns
-
-    Outputs: a pandas dataframe
-    '''
-    dfs_to_concat = [dataframe]
-    for column in col_lst:
-        dummy_df = pd.get_dummies(dataframe[column], prefix=column)
-        dfs_to_concat.append(dummy_df)
-    dataframe = pd.concat(dfs_to_concat, axis=1)
-    for column in col_lst:
-        dataframe.drop(column, axis=1, inplace=True)
-    return dataframe
 
 
 def process_blocks():
