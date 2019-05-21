@@ -214,7 +214,7 @@ def join_with_block_groups(business_df, blocks_df):
     business_df = business_df.dropna(subset=["longitude", "latitude"])
     business_df["the_geom"] = business_df.apply(lambda row: Point(float(row["longitude"]), float(row["latitude"])), axis=1)
     business_gdf = gpd.GeoDataFrame(business_df).set_geometry("the_geom")
-    joined_data = gpd.sjoin(business_gdf, blocks_df[["block_group", "the_geom"]], how="left", op='intersects').drop(columns="index_right")
+    joined_data = gpd.sjoin(business_gdf, blocks_df, how="left", op='intersects').drop(columns="index_right")
     return joined_data
 
 
@@ -222,8 +222,11 @@ def find_alive_neighbors(df):
     '''
     Finds current number of businesses within a block group
     '''
-    df["num_open_bus"] = df.groupby('block_group')['status'].transform('sum')  
-    
+    df["num_open_bus"] = df.groupby('block_group')['status'].transform('sum')
+
+
+def length_alive(df):
+    df['days_alive'] = (df['latest_exp_date'] - df['earliest_date_issued']).dt.days
 
 # # COLUMN_NAMES = ['APPLICATION TYPE',  'LICENSE DESCRIPTION']
 # def breakdown_by_blck_grp(df, col):
