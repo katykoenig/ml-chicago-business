@@ -68,10 +68,12 @@ def split_data(dataframe, date_col, features_lst, date):
     training_df = dataframe[(dataframe[date_col] >= train_start_time)
                             & (dataframe[date_col] <= train_end_time)]
     x_train = training_df[features_lst]
-    y_train = survive_two_years(training_df)
+    survive_two_years(training_df)
+    y_train = training_df['exists_2_yrs']
     testing_df = dataframe[(dataframe[date_col] >= test_start_time) & (dataframe[date_col] <= test_end_time)]
     x_test = testing_df[features_lst]
-    y_test = survive_two_years(testing_df)
+    survive_two_years(testing_df)
+    y_test = testing_df['exists_2_yrs']
     return x_train, x_test, y_train, y_test
 
 
