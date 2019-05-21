@@ -1,20 +1,21 @@
-import process_business as pr
+import process_data as pr
 import pandas as pd
 import numpy as np
 import pipeline as pl
 import descriptive_stats as ds
+from dateutil.relativedelta import relativedelta
 
 
 def go():
-	'''
-	'''
-    bus_df = pr.process_business()
-    pr.make_bus(bus_df)
+    '''
+    '''
+    #bus_df = pr.process_business()
+    #pr.make_bus(bus_df)
     cleaned_bus = pd.read_csv('cleanedbus.csv')
     blocks_df = pr.process_blocks()
     acs_df = pr.process_census()
-    merged = pd.merge(acs_df, blocks_df, left_on='block_group', right_on='GEOID10')
-    joined = join_with_block_groups(cleaned_bus, merged)
+    merged = pd.merge(acs_df, blocks_df, on='block_group')
+    joined = pr.join_with_block_groups(cleaned_bus, merged)
     print("Summary Statistics")
     print(joined.describe())
     print()
@@ -25,16 +26,21 @@ def go():
     print('Summary of Null Values')
     print(joined.isnull().sum(axis=0))
     print()
-    dates_lst = pl.temporal_validate(joined, 'earliest_date_issued', 24)
-    # using most recent (aka largest train, most recent test)
-    date = dates_lst[-1]
-    train_start = date[0]
-    train_end = date[1]
-    test_start = date[2]
-    test_end = date[3]
+    for col in joined.columns:
+        if 'date' in col:
+            joined[col] = pd.to_datetime(joined[col])
+    train_start = joined['earliest_date_issued'].min()
+    test_end = joined['latest_date_issued'].max()
+    test_start = test_end - relativedelta(months=+24, days=+1)
+    train_end = test_end - relativedelta(months=+24)
+    print(train_start, train_end)
+    print(test_start, test_end)
     # the 2 fn calls below are to find how many living neighbor businesses each bus has (a feature)
+    print('finding alive neighbors')
     pr.check_alive(joined, train_end)
     pr.find_alive_neighbors(joined)
     # need to get col names for feature list below
-    features_lst = []
-    pl.split_data(joined, features_lst, data)
+    return joined
+    #features_lst = []
+    #pl.split_data(joined, features_lst, data)
+

@@ -108,6 +108,7 @@ def process_census(acs_csv='acs_17.csv'):
         new_col = 'pct_' + col
         df[new_col] = df[col] / df['race_respondents'] * 100
         desired_cols.append(new_col)
+    df['block_group'] = df['block_group'].astype(str)
     return df[desired_cols]
 
 
@@ -190,7 +191,7 @@ def check_alive(df, date):
 
     Outputs: None
     '''
-    df["status"] = df['latest_exp'] > date
+    df["status"] = df['latest_exp_date'] > date
     df['status'] = df['status'].astype(int)
 
 
@@ -209,10 +210,11 @@ def process_blocks():
 def join_with_block_groups(business_df, blocks_df):
     '''
     '''
+    blocks_df = gpd.GeoDataFrame(blocks_df, geometry='the_geom')
     business_df = business_df.dropna(subset=["longitude", "latitude"])
-    business_df["the_geom"] = business_df.apply(lambda row: Point(float(row["LONGITUDE"]), float(row["LATITUDE"])), axis=1)
+    business_df["the_geom"] = business_df.apply(lambda row: Point(float(row["longitude"]), float(row["latitude"])), axis=1)
     business_gdf = gpd.GeoDataFrame(business_df).set_geometry("the_geom")
-    joined_data = gpd.sjoin(business_gdf, blocks_df[["block_group", "the_geom"]]).drop(columns="index_right")
+    joined_data = gpd.sjoin(business_gdf, blocks_df[["block_group", "the_geom"]], how="left", op='intersects').drop(columns="index_right")
     return joined_data
 
 
@@ -220,11 +222,8 @@ def find_alive_neighbors(df):
     '''
     Finds current number of businesses within a block group
     '''
-    df["num_open_bus"] = np.nan
-    for group in df['block_group'].unique():
-        cnt = df[(df['block_group'] == group)]['status'].value_counts()
-        df.loc[df['block_group'] ==  group, 'num_open_bus'] = cnt[1]
-
+    df["num_open_bus"] = df.groupby('block_group')['status'].transform('sum')  
+    
 
 # # COLUMN_NAMES = ['APPLICATION TYPE',  'LICENSE DESCRIPTION']
 # def breakdown_by_blck_grp(df, col):
