@@ -17,7 +17,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_curve, roc_auc_score, f1_score, precision_score, recall_score, accuracy_score as accuracy, precision_recall_curve
 from sklearn.ensemble import BaggingClassifier, RandomForestClassifier, GradientBoostingClassifier, AdaBoostClassifier
 from dateutil.relativedelta import relativedelta
-import process_data as pr
 
 
 def temporal_validate(dataframe, col, window):
@@ -69,24 +68,11 @@ def split_data(dataframe, date_col, features_lst, date):
     training_df = dataframe[(dataframe[date_col] >= train_start_time)
                             & (dataframe[date_col] <= train_end_time)]
     x_train = training_df[features_lst]
-    y_train = check_for_funding(training_df, timeframe=60)
+    y_train = survive_two_years(training_df)
     testing_df = dataframe[(dataframe[date_col] >= test_start_time) & (dataframe[date_col] <= test_end_time)]
     x_test = testing_df[features_lst]
-    y_test = check_for_funding(testing_df, timeframe=60)
+    y_test = survive_two_years(testing_df)
     return x_train, x_test, y_train, y_test
-
-
-def change_date_type(dataframe):
-    '''
-    Converts columns with dates to datetime objects
-
-    Inputs: a pandas dataframe
-
-    Outputs: None
-    '''
-    for col in dataframe.columns: 
-        if "date" in col:
-            dataframe[col] = pd.to_datetime(dataframe[col])
 
 
 def preprocess(dataframe):
@@ -116,21 +102,11 @@ def preprocess(dataframe):
     return dataframe, set(kept_col)
 
 
-def check_for_funding(dataframe, timeframe):
-    ''' 
-    Checks if project funded within given time frame and createsd a new column
-    on the dataframe reflecting this
-
-    Inputs:
-        dataframe: a pandas dataframe
-        timeframe: an integer representing the number of days allowed to pass
-
-    Output: None
+def survive_two_years(df):
     '''
-    dataframe['time_until_funded'] = dataframe['datefullyfunded'] - dataframe['date_posted']
-    dataframe['time_until_funded'] = dataframe['time_until_funded'].dt.days
-    make_dummy_cont(dataframe, 'time_until_funded', 'funded_by_deadline', timeframe)
-    return dataframe['funded_by_deadline']
+    '''
+    df['exists_2_yrs'] = df['latest_exp_date'] > (df['earliest_date_issued'] + relativedelta(months=+24, days=+1))
+    df['exists_2_yrs'] = df['exists_2_yrs'].astype(int)
 
 
 def discretize_variable_by_quintile(dataframe, col_name):
