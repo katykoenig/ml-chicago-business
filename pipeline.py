@@ -75,37 +75,10 @@ def split_data(dataframe, date_col, features_lst, date):
     return x_train, x_test, y_train, y_test
 
 
-def preprocess(dataframe):
-    '''
-    Preprocesses data through:
-        - Fills null values with median values across columns
-        - Cleans dataframe to drop very highly correlated variables
-
-    Input: a pandas dataframe
-
-    Outputs:
-        dataframe: a pandas dataframe
-        kept_col: set of columns to be kept in dataframe
-    '''
-    corr_df = dataframe.corr()
-    drop_lst = []
-    kept_col = []
-    dataframe.fillna(dataframe.median(), inplace=True)
-    for column in corr_df.columns:
-        drop_lst += (corr_df.index[(abs(corr_df[column]) > 0.95) & \
-                    (abs(corr_df[column]) < 1.00)].tolist())
-        to_drop = set(drop_lst)
-        kept_col += list(to_drop)[:1]
-    for column in to_drop:
-        if column not in kept_col:
-            dataframe.drop([column], axis=1, inplace=True)
-    return dataframe, set(kept_col)
-
-
 def survive_two_years(df):
     '''
     '''
-    df['exists_2_yrs'] = df['latest_exp_date'] > (df['earliest_date_issued'] + relativedelta(months=+24, days=+1))
+    df['exists_2_yrs'] = df['days_alive'] < 731
     df['exists_2_yrs'] = df['exists_2_yrs'].astype(int)
 
 
@@ -258,7 +231,7 @@ results_col = ['model', 'parameters', 'train_start', 'train_end', 'test_start',
                'f1_score_at_50', 'auc_roc_at_50']
 
 
-def combining_function(outputfile, date_lst, model_lst, dataframe, col, features_lst):
+def combining_function(outputfile, date, model_lst, dataframe, col, features_lst):
     '''
     Creates models, evaluates models and writes evaluation of models to csv.
 
@@ -275,34 +248,33 @@ def combining_function(outputfile, date_lst, model_lst, dataframe, col, features
     with open(outputfile, 'w') as csvfile:
         outputwriter = csv.writer(csvfile, delimiter=',')
         outputwriter.writerow(results_col)
-        for date in date_lst:
-            x_train, x_test, y_train, y_test = split_data(dataframe, col, features_lst, date)
-            train_start = date[0]
-            train_end = date[1]
-            test_start = date[2]
-            test_end = date[3]
-            for model in model_lst:
-                clf = clfs[model]
-                params_to_run = params_dict[model]
-                for p in ParameterGrid(params_to_run):
-                    row_lst = [model, p, train_start, train_end, test_start,
-                               test_end, np.mean(y_test)]
-                    clf.set_params(**p)
-                    clf.fit(x_train, y_train)
-                    predicted_scores_test = clf.predict_proba(x_test)[:, 1]
-                    total_lst = []
-                    for threshold in [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5]:
-                        calc_threshold = lambda x, y: 0 if x < y else 1
-                        predicted_test = np.array([calc_threshold(score, threshold)
-                                                   for score in predicted_scores_test])
-                        acc = accuracy(y_pred=predicted_test, y_true=y_test)
-                        prec = precision_score(y_pred=predicted_test, y_true=y_test)
-                        recall = recall_score(y_pred=predicted_test, y_true=y_test)
-                        f_one = f1_score(y_pred=predicted_test, y_true=y_test)
-                        auc_roc = roc_auc_score(y_score=predicted_test, y_true=y_test)
-                        spec_results_lst = [acc, prec, recall, f_one, auc_roc]
-                        total_lst += spec_results_lst
-                    outputwriter.writerow(row_lst + total_lst)
+        x_train, x_test, y_train, y_test = split_data(dataframe, col, features_lst, date)
+        train_start = date[0]
+        train_end = date[1]
+        test_start = date[2]
+        test_end = date[3]
+        for model in model_lst:
+            clf = clfs[model]
+            params_to_run = params_dict[model]
+            for p in ParameterGrid(params_to_run):
+                row_lst = [model, p, train_start, train_end, test_start,
+                           test_end, np.mean(y_test)]
+                clf.set_params(**p)
+                clf.fit(x_train, y_train)
+                predicted_scores_test = clf.predict_proba(x_test)[:, 1]
+                total_lst = []
+                for threshold in [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5]:
+                    calc_threshold = lambda x, y: 0 if x < y else 1
+                    predicted_test = np.array([calc_threshold(score, threshold)
+                                               for score in predicted_scores_test])
+                    acc = accuracy(y_pred=predicted_test, y_true=y_test)
+                    prec = precision_score(y_pred=predicted_test, y_true=y_test)
+                    recall = recall_score(y_pred=predicted_test, y_true=y_test)
+                    f_one = f1_score(y_pred=predicted_test, y_true=y_test)
+                    auc_roc = roc_auc_score(y_score=predicted_test, y_true=y_test)
+                    spec_results_lst = [acc, prec, recall, f_one, auc_roc]
+                    total_lst += spec_results_lst
+                outputwriter.writerow(row_lst + total_lst)
     csvfile.close()
 
 
