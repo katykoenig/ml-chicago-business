@@ -17,7 +17,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_curve, roc_auc_score, f1_score, precision_score, recall_score, accuracy_score as accuracy, precision_recall_curve
 from sklearn.ensemble import BaggingClassifier, RandomForestClassifier, GradientBoostingClassifier, AdaBoostClassifier
 from dateutil.relativedelta import relativedelta
-import process_data as pr
 
 
 def temporal_validate(dataframe, col, window):
@@ -69,68 +68,20 @@ def split_data(dataframe, date_col, features_lst, date):
     training_df = dataframe[(dataframe[date_col] >= train_start_time)
                             & (dataframe[date_col] <= train_end_time)]
     x_train = training_df[features_lst]
-    y_train = check_for_funding(training_df, timeframe=60)
+    survive_two_years(training_df)
+    y_train = training_df['exists_2_yrs']
     testing_df = dataframe[(dataframe[date_col] >= test_start_time) & (dataframe[date_col] <= test_end_time)]
     x_test = testing_df[features_lst]
-    y_test = check_for_funding(testing_df, timeframe=60)
+    survive_two_years(testing_df)
+    y_test = testing_df['exists_2_yrs']
     return x_train, x_test, y_train, y_test
 
 
-def change_date_type(dataframe):
+def survive_two_years(df):
     '''
-    Converts columns with dates to datetime objects
-
-    Inputs: a pandas dataframe
-
-    Outputs: None
     '''
-    for col in dataframe.columns: 
-        if "date" in col:
-            dataframe[col] = pd.to_datetime(dataframe[col])
-
-
-def preprocess(dataframe):
-    '''
-    Preprocesses data through:
-        - Fills null values with median values across columns
-        - Cleans dataframe to drop very highly correlated variables
-
-    Input: a pandas dataframe
-
-    Outputs:
-        dataframe: a pandas dataframe
-        kept_col: set of columns to be kept in dataframe
-    '''
-    corr_df = dataframe.corr()
-    drop_lst = []
-    kept_col = []
-    dataframe.fillna(dataframe.median(), inplace=True)
-    for column in corr_df.columns:
-        drop_lst += (corr_df.index[(abs(corr_df[column]) > 0.95) & \
-                    (abs(corr_df[column]) < 1.00)].tolist())
-        to_drop = set(drop_lst)
-        kept_col += list(to_drop)[:1]
-    for column in to_drop:
-        if column not in kept_col:
-            dataframe.drop([column], axis=1, inplace=True)
-    return dataframe, set(kept_col)
-
-
-def check_for_funding(dataframe, timeframe):
-    ''' 
-    Checks if project funded within given time frame and createsd a new column
-    on the dataframe reflecting this
-
-    Inputs:
-        dataframe: a pandas dataframe
-        timeframe: an integer representing the number of days allowed to pass
-
-    Output: None
-    '''
-    dataframe['time_until_funded'] = dataframe['datefullyfunded'] - dataframe['date_posted']
-    dataframe['time_until_funded'] = dataframe['time_until_funded'].dt.days
-    make_dummy_cont(dataframe, 'time_until_funded', 'funded_by_deadline', timeframe)
-    return dataframe['funded_by_deadline']
+    df['exists_2_yrs'] = df['days_alive'] < 731
+    df['exists_2_yrs'] = df['exists_2_yrs'].astype(int)
 
 
 def discretize_variable_by_quintile(dataframe, col_name):
@@ -282,7 +233,7 @@ results_col = ['model', 'parameters', 'train_start', 'train_end', 'test_start',
                'f1_score_at_50', 'auc_roc_at_50']
 
 
-def combining_function(outputfile, date_lst, model_lst, dataframe, col, features_lst):
+def combining_function(outputfile, date, model_lst, dataframe, col, features_lst):
     '''
     Creates models, evaluates models and writes evaluation of models to csv.
 
@@ -299,34 +250,33 @@ def combining_function(outputfile, date_lst, model_lst, dataframe, col, features
     with open(outputfile, 'w') as csvfile:
         outputwriter = csv.writer(csvfile, delimiter=',')
         outputwriter.writerow(results_col)
-        for date in date_lst:
-            x_train, x_test, y_train, y_test = split_data(dataframe, col, features_lst, date)
-            train_start = date[0]
-            train_end = date[1]
-            test_start = date[2]
-            test_end = date[3]
-            for model in model_lst:
-                clf = clfs[model]
-                params_to_run = params_dict[model]
-                for p in ParameterGrid(params_to_run):
-                    row_lst = [model, p, train_start, train_end, test_start,
-                               test_end, np.mean(y_test)]
-                    clf.set_params(**p)
-                    clf.fit(x_train, y_train)
-                    predicted_scores_test = clf.predict_proba(x_test)[:, 1]
-                    total_lst = []
-                    for threshold in [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5]:
-                        calc_threshold = lambda x, y: 0 if x < y else 1
-                        predicted_test = np.array([calc_threshold(score, threshold)
-                                                   for score in predicted_scores_test])
-                        acc = accuracy(y_pred=predicted_test, y_true=y_test)
-                        prec = precision_score(y_pred=predicted_test, y_true=y_test)
-                        recall = recall_score(y_pred=predicted_test, y_true=y_test)
-                        f_one = f1_score(y_pred=predicted_test, y_true=y_test)
-                        auc_roc = roc_auc_score(y_score=predicted_test, y_true=y_test)
-                        spec_results_lst = [acc, prec, recall, f_one, auc_roc]
-                        total_lst += spec_results_lst
-                    outputwriter.writerow(row_lst + total_lst)
+        x_train, x_test, y_train, y_test = split_data(dataframe, col, features_lst, date)
+        train_start = date[0]
+        train_end = date[1]
+        test_start = date[2]
+        test_end = date[3]
+        for model in model_lst:
+            clf = clfs[model]
+            params_to_run = params_dict[model]
+            for p in ParameterGrid(params_to_run):
+                row_lst = [model, p, train_start, train_end, test_start,
+                           test_end, np.mean(y_test)]
+                clf.set_params(**p)
+                clf.fit(x_train, y_train)
+                predicted_scores_test = clf.predict_proba(x_test)[:, 1]
+                total_lst = []
+                for threshold in [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5]:
+                    calc_threshold = lambda x, y: 0 if x < y else 1
+                    predicted_test = np.array([calc_threshold(score, threshold)
+                                               for score in predicted_scores_test])
+                    acc = accuracy(y_pred=predicted_test, y_true=y_test)
+                    prec = precision_score(y_pred=predicted_test, y_true=y_test)
+                    recall = recall_score(y_pred=predicted_test, y_true=y_test)
+                    f_one = f1_score(y_pred=predicted_test, y_true=y_test)
+                    auc_roc = roc_auc_score(y_score=predicted_test, y_true=y_test)
+                    spec_results_lst = [acc, prec, recall, f_one, auc_roc]
+                    total_lst += spec_results_lst
+                outputwriter.writerow(row_lst + total_lst)
     csvfile.close()
 
 

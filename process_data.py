@@ -3,10 +3,11 @@ import numpy as np
 from shapely.geometry import shape, Point
 import shapely.wkt
 import pandas as pd
+import csv
 from dateutil.relativedelta import relativedelta
 
 
-def process_census(acs_csv):
+def process_census(acs_csv='acs_17.csv'):
     '''
     Reads in the ACS census data from csv, creating bins for specified features
     and finds percentages for these features
@@ -107,6 +108,7 @@ def process_census(acs_csv):
         new_col = 'pct_' + col
         df[new_col] = df[col] / df['race_respondents'] * 100
         desired_cols.append(new_col)
+    df['block_group'] = df['block_group'].astype(str)
     return df[desired_cols]
 
 
@@ -136,43 +138,30 @@ def process_business():
     return df
 
 
-def tmp(bus_df):
+# will take forever to run: I uploaded to CSV to our repo so just download that
+def make_bus(bus_df, filename='cleanedbus.csv'):
     to_write = {new: [] for new in ['unique_id', 'latitude', 'longitude', 'earliest_date_issued', 'latest_date_issued', 'latest_exp_date']}  
-    top_codes = bus_df.groupby('LICENSE CODE').size().sort_values(ascending=False)[:20] 
-    for code in list(top_codes.index):
-        to_write[code] = []
-    for bus_id in bus_df['unique_id']:
-        to_write['unique_id'].append(bus_id)
-        relevant = bus_df[bus_df['unique_id'] == bus_id]
-        to_write['earliest_date_issued'].append(relevant['LICENSE TERM START DATE'].min())
-        to_write['latest_date_issued'].append(relevant['LICENSE TERM START DATE'].max())
-        to_write['latest_exp_date'].append(relevant['LICENSE TERM EXPIRATION DATE'].max())
-        to_write['latitude'].append(relevant['LATITUDE'].iloc[-1])
-        to_write['longitude'].append(relevant['LONGITUDE'].iloc[-1])
-        for code in list(top_codes.index):
-            if code in list(relevant['LICENSE CODE']):
-                to_write[code].append(1)
-            else:
-                to_write[code].append(0)
-    new_bus_df = pd.DataFrame.from_dict(to_write)
-    return new_bus_df
+    with open(filename, 'w') as csvfile:
+        outputwriter = csv.writer(csvfile, delimiter=',')
+        top_codes = bus_df.groupby('LICENSE CODE').size().sort_values(ascending=False)[:20]
+        header = ['unique_id', 'latitude', 'longitude', 'earliest_date_issued', 'latest_date_issued', 'latest_exp_date'] + list(top_codes.index)
+        outputwriter.writerow(header)
+        for bus_id in bus_df['unique_id'].unique():
+            relevant = bus_df[bus_df['unique_id'] == bus_id]
+            earliest_issued = relevant['LICENSE TERM START DATE'].min()
+            latest_issued = relevant['LICENSE TERM START DATE'].max()
+            latest_exp = relevant['LICENSE TERM EXPIRATION DATE'].max()
+            lat = relevant['LATITUDE'].iloc[-1]
+            lon = relevant['LONGITUDE'].iloc[-1]
+            row = [bus_id, lat, lon, earliest_issued, latest_issued, latest_exp]
+            for code in list(top_codes.index):
+                if code in list(relevant['LICENSE CODE']):
+                    row.append(1)
+                else:
+                    row.append(0)
+            outputwriter.writerow(row)
+    csvfile.close()
 
-
-    ##smalldf
-    counts = inputdf.groupby('unique_id').size()
-    for i, df in minidf.groupby('unique_id'):
-        #if address doesn't change
-        #store entry and permits
-        
-        #if address changes
-        #? and permits
-        pass        
-        '''
-        cur = {}
-        if df['ADDRESS'].unique().size == 1:
-            cur['ADDRESS'] = 
-        to_write[i] = 
-        '''
 
 
 def find_duration(df, col1, col2):
@@ -202,28 +191,12 @@ def check_alive(df, date):
 
     Outputs: None
     '''
-    df["status"] = np.nan
-    for account in df['ACCOUNT NUMBER'].unique():
-        if np.where(df[df['ACCOUNT NUMBER'] == account]['LICENSE TERM EXPIRATION DATE'].max() < date, 0, 1) == 1:
-            df.loc[df['ACCOUNT NUMBER'] == account, 'status'] = 1
-        else:
-            df.loc[df['ACCOUNT NUMBER'] == account, 'status'] = 0
-
-
-def survive_two_years(df):
-    '''
-    '''
-    df['exists_2_yrs'] = np.nan
-    for account in df['ACCOUNT NUMBER'].unique():
-        if np.where(df[df['ACCOUNT NUMBER'] == account]['LICENSE TERM EXPIRATION DATE'].max() < (df['DATE ISSUED'] + np.timedelta64(2, 'Y')), 0, 1) == 1:
-            df.loc[df['ACCOUNT NUMBER'] == account, 'exists_2_yrs'] = 1
-        else:
-            df.loc[df['ACCOUNT NUMBER'] == account, 'exists_2_yrs'] = 0   
+    df["status"] = df['latest_exp_date'] > date
+    df['status'] = df['status'].astype(int)
 
 
 def process_blocks():
     '''
-
     '''
     df = pd.read_csv('blocks.csv')
     df['GEOID10'] = df['GEOID10'].astype(str)
@@ -237,32 +210,34 @@ def process_blocks():
 def join_with_block_groups(business_df, blocks_df):
     '''
     '''
-    business_df = business_df.dropna(subset=["LONGITUDE", "LATITUDE"])
-    business_df["the_geom"] = business_df.apply(lambda row: Point(float(row["LONGITUDE"]), float(row["LATITUDE"])), axis=1)
+    blocks_df = gpd.GeoDataFrame(blocks_df, geometry='the_geom')
+    business_df = business_df.dropna(subset=["longitude", "latitude"])
+    business_df["the_geom"] = business_df.apply(lambda row: Point(float(row["longitude"]), float(row["latitude"])), axis=1)
     business_gdf = gpd.GeoDataFrame(business_df).set_geometry("the_geom")
-    joined_data = gpd.sjoin(business_gdf, blocks_df[["block_group", "the_geom"]]).drop(columns="index_right")
+    joined_data = gpd.sjoin(business_gdf, blocks_df, how="left", op='intersects').drop(columns="index_right")
     return joined_data
 
-def find_num_bus(df):
+
+def find_alive_neighbors(df):
     '''
     Finds current number of businesses within a block group
     '''
-    df["num_open_bus"] = np.nan
-    for group in df['block_group'].unique():
-        cnt = df[(df['block_group'] == group)]['status'].value_counts()
-        df.loc[df['block_group'] ==  group, 'num_open_bus'] = cnt[1]
+    df["num_open_bus"] = df.groupby('block_group')['status'].transform('sum')
 
 
-COLUMN_NAMES = ['APPLICATION TYPE',  'LICENSE DESCRIPTION']
-def breakdown_by_blck_grp(df, col):
-    '''
-    Finds percentage breakdown for each type of a given column for each block group 
-    e.g. what's the percentage of renewals in this blk group?
-    '''
-    val_lst = list(df[col].unique())
-    grouped = df.groupby('block_group')[col].value_counts().unstack(fill_value=0)
-    pct = grouped[val_lst].div(grouped.sum(axis=1), axis=0)*100
-    return pct.reset_index()
+def length_alive(df):
+    df['days_alive'] = (df['latest_exp_date'] - df['earliest_date_issued']).dt.days
+
+# # COLUMN_NAMES = ['APPLICATION TYPE',  'LICENSE DESCRIPTION']
+# def breakdown_by_blck_grp(df, col):
+#     '''
+#     Finds percentage breakdown for each type of a given column for each block group 
+#     e.g. what's the percentage of renewals in this blk group?
+#     '''
+#     val_lst = list(df[col].unique())
+#     grouped = df.groupby('block_group')[col].value_counts().unstack(fill_value=0)
+#     pct = grouped[val_lst].div(grouped.sum(axis=1), axis=0)*100
+#     return pct.reset_index()
 
 
 # do we want to include anything not issue/renew?

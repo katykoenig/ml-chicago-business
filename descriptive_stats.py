@@ -10,18 +10,6 @@ import plotnine as p9
 import seaborn as sns
 
 
-def summary_stats(dataframe):
-    '''
-    Creates table of summary statistics for each column of dataframe
-
-    Input: a pandas dataframe
-
-    Output: a table
-    '''
-    summary = dataframe.describe()
-    return summary
-
-
 def evaluate_correlations(dataframe, output_filename):
     '''
     Presents information regarding the correlation of each variable/column of a dataframe
@@ -70,14 +58,3 @@ def create_scatterplots(dataframe, unique_id='unique_id'):
         plt1 = p9.ggplot(reset_df, p9.aes(x=column, y=unique_id)) + p9.geom_point()
         print('Saving scatterplot: '  + file_name)
         p9.ggsave(filename=file_name, plot=plt1, device='png')
-
-
-def check_null_values(dataframe):
-    '''
-    Counts the number of null values in each column of a dataframe
-
-    Input: a pandas dataframe
-
-    Output: a pandas series with the number of null values in each column
-    '''
-    return dataframe.isnull().sum(axis=0)
