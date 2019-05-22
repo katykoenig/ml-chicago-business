@@ -12,8 +12,8 @@ Patrick Lavallee Delgado (@lavalleedelgado)
 '''
 
 import pandas as pd
-import requests
 import psycopg2 as pg
+import requests
 
 CHICAGO_LICENSES_API = "https://data.cityofchicago.org/resource/xqx5-8hwx.json"
 CHICAGO_LICENSES_COLUMNS = (
@@ -26,12 +26,13 @@ CHICAGO_LICENSES_COLUMNS = (
     "longitude"
 )
 
+
 class Storefronts:
 
-    def __init__(self, name="Chicago Storefronts"):
+    def __init__(self):
 
         self.dbhost = "127.0.0.1"
-        self.dbname = name
+        self.dbname = "Chicago Storefronts"
 
 
     def open(self):
