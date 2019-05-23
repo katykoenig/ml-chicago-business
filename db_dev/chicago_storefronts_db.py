@@ -11,10 +11,13 @@ Patrick Lavallee Delgado (@lavalleedelgado)
 
 '''
 
+import os
 import pandas as pd
-import psycopg2 as pg
 import requests
+import sqlite3
 
+PWD = os.path.dirname(__file__)
+CHICAGO_STOREFRONTS_DB = os.path.join(PWD, "chicago_storefronts_db.sqlite3")
 CHICAGO_LICENSES_API = "https://data.cityofchicago.org/resource/xqx5-8hwx.json"
 CHICAGO_LICENSES_COLUMNS = (
     "account_number,"
@@ -31,19 +34,18 @@ class Storefronts:
 
     def __init__(self):
 
-        self.dbhost = "127.0.0.1"
         self.dbname = "Chicago Storefronts"
 
 
     def open(self):
 
-        credentials = "host=" + self.dbhost + " dbname=" + self.dbname
-        self.connection = pg.connect(credentials)
+        self.connection = sqlite3.connect(CHICAGO_STOREFRONTS_DB)
+        self.cursor = self.connection.cursor()
     
 
     def close(self):
 
-        assert self.connection and not self.connection.closed
+        assert self.connection
         self.connection.close()
     
 
@@ -54,15 +56,14 @@ class Storefronts:
         CREATE TABLE licenses (
             account_number      INTEGER,
             site_number         INTEGER,
-            license_code        VARCHAR,
+            license_code        VARCHAR(255),
             issue_date          TIMESTAMP,
             expiry_date         TIMESTAMP,
-            latitude            NUMERIC,
-            longitude           NUMERIC
+            latitude            FLOAT,
+            longitude           FLOAT
         );
         '''
-        cursor = self.connection.cursor()
-        cursor.execute(create_licences_table)
+        self.cursor.executescript(create_licences_table)
         self.connection.commit()
     
 
@@ -79,13 +80,22 @@ class Storefronts:
                     "$limit": record_queue
                 }
             )
-            new_license_data = request.json()
-            record_count += len(new_license_data)
-            populate_licenses_table = '''
-            COPY licenses FROM STDIN WITH FORCE NULL;
-            '''
-            cursor = self.connection.cursor()
-            cursor.copy_expert(populate_licenses_table, new_license_data)
+            new_licenses = request.json()
+            record_count += len(new_licenses)
+            for new_license in new_licenses:
+                new_values = (
+                    new_license.get("account_number"),
+                    new_license.get("site_number"),
+                    new_license.get("license_code"),
+                    new_license.get("date_issued"),
+                    new_license.get("expiration_date"),
+                    new_license.get("latitude"),
+                    new_license.get("longitude")
+                )
+                populate_licenses_table = '''
+                INSERT INTO licenses VALUES (?, ?, ?, ?, ?, ?, ?);
+                '''
+                self.cursor.execute(populate_licenses_table, new_values)
             self.connection.commit()
 
 
@@ -101,8 +111,7 @@ class Storefronts:
             longitude           NUMERIC
         );
         '''
-        cursor = self.connection.cursor()
-        cursor.execute(create_storefronts_table)
+        self.cursor.executescript(create_storefronts_table)
         self.connection.commit()
 
 
@@ -134,7 +143,7 @@ class Storefronts:
             ), 
             sf_ids_complete AS (
                 SELECT 
-                    FORMAT (account_number || '-' || site_number) AS sf_id, 
+                    account_number || '-' || site_number AS sf_id, 
                     earliest_issue, 
                     latest_issue, 
                     latitude, 
@@ -145,7 +154,6 @@ class Storefronts:
             ) 
         INSERT INTO storefronts SELECT * FROM sf_ids_complete;
         '''
-        cursor = self.connection.cursor()
-        cursor.execute(populate_storefronts_table)
+        self.cursor.executescript(populate_storefronts_table)
         self.connection.commit()
 

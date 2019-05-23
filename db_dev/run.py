@@ -36,7 +36,7 @@ if __name__ == "__main__":
         description="Create the Chicago Storefronts database."
     )
     parser.add_argument(
-        "-create_licenses",
+        "--cl",
         action="store_const",
         const=True,
         default=False,
@@ -44,7 +44,7 @@ if __name__ == "__main__":
         dest="create_licenses_table"
     )
     parser.add_argument(
-        "-populate_licenses",
+        "--pl",
         action="store_const",
         const=True,
         default=False,
@@ -52,7 +52,7 @@ if __name__ == "__main__":
         dest="populate_licenses_table"
     )
     parser.add_argument(
-        "-create_storefronts",
+        "--cs",
         action="store_const",
         const=True,
         default=False,
@@ -60,7 +60,7 @@ if __name__ == "__main__":
         dest="create_storefronts_table"
     )
     parser.add_argument(
-        "-populate_storefronts",
+        "--ps",
         action="store_const",
         const=True,
         default=False,
