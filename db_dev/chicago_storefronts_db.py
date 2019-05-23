@@ -56,7 +56,7 @@ class Storefronts:
         CREATE TABLE licenses (
             account_number      INTEGER,
             site_number         INTEGER,
-            license_code        VARCHAR(255),
+            license_code        VARCHAR,
             issue_date          TIMESTAMP,
             expiry_date         TIMESTAMP,
             latitude            FLOAT,
@@ -101,16 +101,41 @@ class Storefronts:
 
     def create_storefronts_table(self):
 
+        identify_major_licenses = '''
+        WITH license_counts AS ( 
+            SELECT 
+                license_code, 
+                COUNT() OVER( 
+                    PARTITION BY license_code 
+                    ORDER BY license_code ASC 
+                ) AS license_count 
+            FROM licenses 
+            GROUP BY account_number, site_number 
+            ) 
+        SELECT DISTINCT license_code 
+        FROM license_counts 
+        ORDER BY license_count DESC 
+        LIMIT 20;
+        '''
+        self.cursor.execute(identify_major_licenses)
+        self.major_licenses = [
+            license_code[0]
+            for license_code in self.cursor.fetchall()
+        ]
         create_storefronts_table = '''
         DROP TABLE IF EXISTS storefronts;
         CREATE TABLE storefronts (
-            sf_id               VARCHAR,
-            earliest_issue      TIMESTAMP,
-            latest_issue        TIMESTAMP,
-            latitude            NUMERIC,
-            longitude           NUMERIC
-        );
+            sf_id               VARCHAR, 
+            earliest_issue      TIMESTAMP, 
+            latest_issue        TIMESTAMP, 
+            latitude            FLOAT, 
+            longitude           FLOAT, 
         '''
+        create_storefronts_table += ", \n".join([
+            "'lc_" + major_license + "\' INTEGER DEFAULT 0"
+            for major_license in self.major_licenses
+        ])
+        create_storefronts_table += ");"
         self.cursor.executescript(create_storefronts_table)
         self.connection.commit()
 
@@ -118,42 +143,58 @@ class Storefronts:
     def populate_storefronts_table(self):
 
         populate_storefronts_table = '''
-        WITH
-            sf_ids_aggs AS (
+        WITH 
+            sf_ids_aggs AS ( 
                 SELECT 
-                    account_number,
-                    site_number, 
+                    account_number || '-' || site_number AS sf_id, 
                     MIN(issue_date) AS earliest_issue, 
-                    MAX(expiry_date) AS latest_issue
+                    MAX(expiry_date) AS latest_issue 
                 FROM licenses 
-                GROUP BY account_number, site_number
+                GROUP BY account_number, site_number 
             ), 
-            sf_ids_locs AS (
-                SELECT
-                    account_number, 
-                    site_number, 
+            sf_ids_locs AS ( 
+                SELECT 
+                    account_number || '-' || site_number AS sf_id, 
                     latitude, 
                     longitude, 
-                    RANK() OVER (
+                    RANK() OVER ( 
                         PARTITION BY account_number, site_number 
-                        ORDER BY issue_date DESC
+                        ORDER BY issue_date DESC 
                     ) AS last_location 
                 FROM licenses 
                 WHERE latitude IS NOT NULL AND longitude IS NOT NULL 
             ), 
-            sf_ids_complete AS (
+            sf_ids_complete AS ( 
                 SELECT 
-                    account_number || '-' || site_number AS sf_id, 
+                    sf_id, 
                     earliest_issue, 
                     latest_issue, 
                     latitude, 
                     longitude 
                 FROM sf_ids_aggs 
-                JOIN sf_ids_locs USING (account_number, site_number) 
+                JOIN sf_ids_locs USING (sf_id) 
                 WHERE last_location = 1 
             ) 
-        INSERT INTO storefronts SELECT * FROM sf_ids_complete;
+        INSERT INTO storefronts (
+            sf_id, 
+            earliest_issue, 
+            latest_issue, 
+            latitude, 
+            longitude 
+        ) 
+        SELECT * FROM sf_ids_complete;
         '''
-        self.cursor.executescript(populate_storefronts_table)
+        self.cursor.execute(populate_storefronts_table)
+        for major_license in self.major_licenses:
+            update_license = f'''
+            UPDATE storefronts 
+            SET 'lc_{major_license}' = 1 
+            WHERE sf_id IN ( 
+                SELECT account_number || '-' || site_number AS sf_id 
+                FROM licenses 
+                WHERE license_code = ? 
+            )
+            '''
+            self.cursor.execute(update_license, (major_license,))
         self.connection.commit()
 

@@ -26,6 +26,7 @@ def run_chicago_storefronts_database(arguments):
     if arguments.create_storefronts_table:
         db.create_storefronts_table()
     if arguments.populate_storefronts_table:
+        db.create_storefronts_table()
         db.populate_storefronts_table()
     db.close()
 
