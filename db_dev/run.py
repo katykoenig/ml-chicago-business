@@ -40,7 +40,7 @@ if __name__ == "__main__":
         action="store_const",
         const=True,
         default=False,
-        help="Create database without rerequestingfrom Chicago Data Portal API.",
+        help="Create database without rerequesting from Chicago Data Portal API.",
         dest="no_download"
     )
     arguments = parser.parse_args()
