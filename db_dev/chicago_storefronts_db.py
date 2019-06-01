@@ -165,7 +165,7 @@ class Storefronts:
                 WHERE latitude IS NOT NULL AND longitude IS NOT NULL 
             ), 
             sf_ids_complete AS ( 
-                SELECT 
+                SELECT DISTINCT 
                     sf_id, 
                     earliest_issue, 
                     latest_issue, 
