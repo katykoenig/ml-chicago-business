@@ -5,6 +5,7 @@ import shapely.wkt
 import pandas as pd
 import csv
 from dateutil.relativedelta import relativedelta
+from datetime import datetime
 
 
 def process_census(acs_csv='acs_17.csv'):
@@ -112,13 +113,46 @@ def process_census(acs_csv='acs_17.csv'):
     return df[desired_cols]
 
 
+KEEP_COLS = ['SR_TYPE', 'STATUS', 'CREATED_DATE', 'CLOSED_DATE',
+             'CREATED_HOUR', 'CREATED_DAY_OF_WEEK',
+             'LATITUDE', 'LONGITUDE']
+
+def process_calls(blocks_df, calls_csv='311.csv', col_lst=KEEP_COLS):
+    '''
+    '''
+    calls_df = pd.read_csv(calls_csv, parse_dates=['CREATED_DATE', 'CLOSED_DATE'])
+    calls_df = calls_df[calls_df['DUPLICATE'] == False]
+    calls_df = calls_df[col_lst]
+    calls_df.dropna(subset=['LATITUDE', 'LONGITUDE'], inplace=True)
+    time_diff = calls_df['CLOSED_DATE'] - calls_df['CREATED_DATE']
+    calls_df['time_before_closed']  = time_diff.dt.days
+    blocks_df = gpd.GeoDataFrame(blocks_df, geometry='the_geom')
+    calls_df["the_geom"] = calls_df.apply(lambda row: Point(float(row["LONGITUDE"]), float(row["LATITUDE"])), axis=1)
+    calls_gdf = gpd.GeoDataFrame(calls_df).set_geometry("the_geom")
+    joined = gpd.sjoin(calls_gdf, blocks_df, how="left", op='intersects').drop(columns="index_right")
+    #Finds percentage of each type of call and total number of calls per block group
+    type_grouped = joined.groupby('block_group')['SR_TYPE'].value_counts().unstack(fill_value=0)
+    type_pct = type_grouped.div(type_grouped.sum(axis=1), axis=0)*100  
+    type_pct['total'] = type_grouped.sum(axis=1)
+    # Finds the avg hour and day of week for calls in each block group
+    means = joined.groupby('block_group').mean()
+    means['CREATED_HOUR'] = means['CREATED_HOUR'].astype('int64') 
+    means['CREATED_DAY_OF_WEEK'] = means['CREATED_DAY_OF_WEEK'].astype('int64')
+    # Finds the percentage of open and closed calls in each block group
+    status = joined.groupby('block_group')['STATUS'].value_counts().unstack(fill_value=0)
+    status_pct = status.div(status.sum(axis=1), axis=0)*100 
+    # Combines 3 grouped dataframes
+    combined = pd.merge(type_pct, means, on='block_group')
+    total = pd.merge(combined, status_pct, on='block_group')
+    return total
+
 
 col_types = {'ACCOUNT NUMBER': str, 'SITE NUMBER': int, 'LICENSE CODE': str,
              'ADDRESS': str, 'APPLICATION TYPE': str, 
              'APPLICATION REQUIREMENTS COMPLETE': str,
-               'LICENSE TERM START DATE': str , 'LICENSE STATUS' : str,
-               'LICENSE TERM EXPIRATION DATE': str, 'DATE ISSUED': str,
-               'LONGITUDE': str, 'LATITUDE': str}
+             'LICENSE TERM START DATE': str , 'LICENSE STATUS' : str,
+             'LICENSE TERM EXPIRATION DATE': str, 'DATE ISSUED': str,
+             'LONGITUDE': str, 'LATITUDE': str}
 
 def process_business():
     '''
@@ -205,6 +239,17 @@ def process_blocks():
     gdf = gpd.GeoDataFrame(df).set_geometry("the_geom").drop(columns=df.columns.difference(["block_group", "the_geom"]))
     gdf = gpd.GeoDataFrame(gdf).set_geometry('the_geom')
     return gdf
+
+
+# Join blocks and census first so we can impute the zeros for census data prior to join w/ business_df
+
+def join_chiblocks_census(census_df, blocks_df):
+    '''
+    Joins the ACS data with the Chicago block groups data and fills any nulls with zeros.
+    (nulls are due to no population)
+    '''
+    joined = pd.merge(census_df, blocks_df, on='block_group', how="outer")
+    return joined.fillna(value=0)
 
 
 def join_with_block_groups(business_df, blocks_df):
