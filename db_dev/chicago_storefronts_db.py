@@ -2,7 +2,7 @@
 Promoting Sustained Entrepreneurship in Chicago
 Machine Learning for Public Policy
 University of Chicago, CS & Harris School of Public Policy
-May 2019
+June 2019
 
 Rayid Ghani (@rayidghani)
 Katy Koenig (@katykoenig)
@@ -99,32 +99,34 @@ class Storefronts:
             self.connection.commit()
 
 
-    def create_storefronts_table(self):
+    def create_storefronts_table(self, l_bound, u_bound):
 
-        identify_major_licenses = '''
-        WITH license_counts AS ( 
-            SELECT 
-                license_code, 
-                COUNT() OVER( 
-                    PARTITION BY license_code 
-                    ORDER BY license_code ASC 
-                ) AS license_count 
-            FROM licenses 
-            GROUP BY account_number, site_number 
-            ) 
-        SELECT DISTINCT license_code 
-        FROM license_counts 
-        ORDER BY license_count DESC 
-        LIMIT 20;
         '''
-        self.cursor.execute(identify_major_licenses)
-        self.major_licenses = [
+        Create a table of active storefronts and their active licenses for a
+        period given by lower and upper bounds.
+
+        l_bound (datetime64): inclusive lower bound for license expiry date.
+        u_bound (datetime64): exclusive upper bound for licsene issue date.
+
+        '''
+
+        l_bound = pd.Timestamp(l_bound)
+        u_bound = pd.Timestamp(u_bound)
+        identify_extant_licenses = f'''
+        SELECT DISTINCT license_code 
+        FROM licenses 
+        WHERE DATETIME(expiry_date) >= DATETIME('{l_bound}') 
+        AND DATETIME(issue_date) < DATETIME('{u_bound}'); 
+        '''
+        self.cursor.execute(identify_extant_licenses)
+        extant_licenses = [
             license_code[0]
             for license_code in self.cursor.fetchall()
         ]
-        create_storefronts_table = '''
-        DROP TABLE IF EXISTS storefronts;
-        CREATE TABLE storefronts (
+        table_label = str(l_bound.year) + "_" + str(u_bound.year)
+        create_storefronts_table = f'''
+        DROP TABLE IF EXISTS storefronts_{table_label};
+        CREATE TABLE storefronts_{table_label} (
             sf_id               VARCHAR, 
             earliest_issue      TIMESTAMP, 
             latest_issue        TIMESTAMP, 
@@ -132,17 +134,29 @@ class Storefronts:
             longitude           FLOAT, 
         '''
         create_storefronts_table += ", \n".join([
-            "'lc_" + major_license + "\' INTEGER DEFAULT 0"
-            for major_license in self.major_licenses
+            "'lc_" + license_code + "\' INTEGER DEFAULT 0"
+            for license_code in extant_licenses
         ])
         create_storefronts_table += ");"
         self.cursor.executescript(create_storefronts_table)
         self.connection.commit()
+        self.populate_storefronts_table(l_bound, u_bound, extant_licenses)
 
 
-    def populate_storefronts_table(self):
+    def populate_storefronts_table(self, l_bound, u_bound, extant_licenses):
 
-        populate_storefronts_table = '''
+        '''
+        Populate a table of active storefronts and their active licenses for a
+        period given by lower and upper bounds.
+
+        l_bound (Timestamp): inclusive lower bound for license expiry date.
+        u_bound (Timestamp): exclusive upper bound for licsene issue date.
+        extant_licenses (list): collection of licenses extant in this period.
+
+        '''
+
+        table_label = str(l_bound.year) + "_" + str(u_bound.year)
+        populate_storefronts_table = f'''
         WITH 
             sf_ids_aggs AS ( 
                 SELECT 
@@ -151,6 +165,8 @@ class Storefronts:
                     MAX(expiry_date) AS latest_issue 
                 FROM licenses 
                 GROUP BY account_number, site_number 
+                WHERE DATETIME(expiry_date) >= DATETIME('{l_bound}') 
+                AND DATETIME(issue_date) < DATETIME('{u_bound}') 
             ), 
             sf_ids_locs AS ( 
                 SELECT 
@@ -163,6 +179,8 @@ class Storefronts:
                     ) AS last_location 
                 FROM licenses 
                 WHERE latitude IS NOT NULL AND longitude IS NOT NULL 
+                AND DATETIME(expiry_date) >= DATETIME('{l_bound}') 
+                AND DATETIME(issue_date) < DATETIME('{u_bound}') 
             ), 
             sf_ids_complete AS ( 
                 SELECT DISTINCT 
@@ -175,7 +193,7 @@ class Storefronts:
                 JOIN sf_ids_locs USING (sf_id) 
                 WHERE last_location = 1 
             ) 
-        INSERT INTO storefronts (
+        INSERT INTO storefronts_{table_label} (
             sf_id, 
             earliest_issue, 
             latest_issue, 
@@ -185,16 +203,18 @@ class Storefronts:
         SELECT * FROM sf_ids_complete;
         '''
         self.cursor.execute(populate_storefronts_table)
-        for major_license in self.major_licenses:
+        for extant_license in extant_licenses:
             update_license = f'''
-            UPDATE storefronts 
-            SET 'lc_{major_license}' = 1 
+            UPDATE storefronts_{table_label} 
+            SET 'lc_{extant_license}' = 1 
             WHERE sf_id IN ( 
                 SELECT account_number || '-' || site_number AS sf_id 
                 FROM licenses 
-                WHERE license_code = ? 
-            )
+                WHERE license_code = {extant_license} 
+                AND DATETIME(expiry_date) >= DATETIME('{l_bound}') 
+                AND DATETIME(issue_date) < DATETIME('{u_bound}') 
+            );
             '''
-            self.cursor.execute(update_license, (major_license,))
-        self.connection.commit()
+            self.cursor.executescript(update_license)
+            self.connection.commit()
 
