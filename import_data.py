@@ -1,7 +1,7 @@
 import requests
 import pandas as pd
 from functools import reduce
-
+import os.path
 
 def get_chicago_data():
     '''
@@ -14,14 +14,18 @@ def get_chicago_data():
     CSV_FRAG = '/rows.csv?accessType=DOWNLOAD'
     URLS = {'business': CSV_URL + 'xqx5-8hwx' + CSV_FRAG,
             'blocks': CSV_URL + 'bt9m-d2mf' + CSV_FRAG,
-            '311': CSV_URL + 'v6vf-nfxy' + CSV_FRAG}
+            '311': CSV_URL + 'v6vf-nfxy' + CSV_FRAG,
+            'crimes': CSV_URL + 'ijzp-q8t2' + CSV_FRAG} #datasets to download
     for key, val in URLS.items():
-        df = pd.read_csv(val)
-        print(key, 'download complete')
-        if key == 'business':
-            df = df[df['CITY'] == 'CHICAGO']
-        df.to_csv(key + '.csv')
-        print(key, 'saved')
+        if not os.path.isfile(key + '.csv'): #check if already downloaded
+            df = pd.read_csv(val)
+            print(key, 'download complete')
+            if key == 'business':
+                df = df[df['CITY'] == 'CHICAGO']
+            df.to_csv(key + '.csv')
+            print(key, 'saved')
+        else:
+            print(key, 'already downloaded')
 
 
 #getting ACS data
@@ -44,7 +48,7 @@ def compile_census_data(acs_variables, year):
     LOCATION_VARIABLES = ["state", "county", "tract", "block group"]
     ACS_API = "https://api.census.gov/data/" + str(year) + "/acs/acs5"
     data = []
-    for i in range(acs_variables['Dataset'].max()):
+    for i in range(acs_variables['Dataset'].max()): #loop over ACS tables
         current = acs_variables[acs_variables['Dataset'] == i+1]
         data.append(get_acs_data(current, ACS_API))
     merged = reduce(lambda left, right: pd.merge(left, right, how='outer', on=LOCATION_VARIABLES), data)
