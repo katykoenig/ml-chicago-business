@@ -135,7 +135,7 @@ def process_crime(blocks_df, col, start_time, end_time, crimes_csv='crimes.csv',
     means = joined.groupby('block_group').mean()
     # Combines 3 grouped dataframes
     combined = pd.merge(type_pct, means, on='block_group')
-    return combined
+    return combined.loc[:, ~combined.columns.isin(['Latitude', 'Longitude'])]
 
 
 col_types = {'ACCOUNT NUMBER': str, 'SITE NUMBER': int, 'LICENSE CODE': str,
