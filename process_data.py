@@ -5,6 +5,7 @@ import shapely.wkt
 import pandas as pd
 import csv
 from dateutil.relativedelta import relativedelta
+from datetime import datetime
 
 
 def process_census(acs_csv='acs_17.csv'):
@@ -18,91 +19,60 @@ def process_census(acs_csv='acs_17.csv'):
     Output: a pandas dataframe of desired ACS columns
     '''
     df = pd.read_csv(acs_csv)
-    total_male = 'Estimate!!Total!!Male'
-    total_female = 'Estimate!!Total!!Female'
-    total_travel_time = 'Estimate!!Total_x'
-    total_inc = 'hhinc_respondents'
-    agg_dict = {'male_children': df['Estimate!!Total!!Male!!Under 5 years'] +
-                    df['Estimate!!Total!!Male!!5 to 9 years'] +
-                    df['Estimate!!Total!!Male!!10 to 14 years'] +
-                    df['Estimate!!Total!!Male!!15 to 17 years'],
-                'male_working': df['Estimate!!Total!!Male!!18 and 19 years'] + 
-                    df['Estimate!!Total!!Male!!20 years'] +
-                    df['Estimate!!Total!!Male!!21 years'] +
-                    df['Estimate!!Total!!Male!!22 to 24 years'] +
-                    df['Estimate!!Total!!Male!!25 to 29 years'] +
-                    df['Estimate!!Total!!Male!!30 to 34 years'] +
-                    df['Estimate!!Total!!Male!!35 to 39 years'] +
-                    df['Estimate!!Total!!Male!!40 to 44 years'] +
-                    df['Estimate!!Total!!Male!!45 to 49 years'] +
-                    df['Estimate!!Total!!Male!!50 to 54 years'] +
-                    df['Estimate!!Total!!Male!!55 to 59 years'] +
-                    df['Estimate!!Total!!Male!!60 and 61 years'] +
-                    df['Estimate!!Total!!Male!!62 to 64 years'],
-                'male_elderly':df['Estimate!!Total!!Male!!65 and 66 years'] +
-                    df['Estimate!!Total!!Male!!67 to 69 years'] +
-                    df['Estimate!!Total!!Male!!70 to 74 years'] +
-                    df['Estimate!!Total!!Male!!75 to 79 years'] +
-                    df['Estimate!!Total!!Male!!80 to 84 years'] +
-                    df['Estimate!!Total!!Male!!85 years and over'],
-                'female_chilren': df['Estimate!!Total!!Female!!Under 5 years'] +
-                      df['Estimate!!Total!!Female!!5 to 9 years'] + 
-                      df['Estimate!!Total!!Female!!10 to 14 years'] +
-                      df['Estimate!!Total!!Female!!15 to 17 years'],
-                'female_working': df['Estimate!!Total!!Female!!18 and 19 years'] +
-                      df['Estimate!!Total!!Female!!20 years'] +
-                      df['Estimate!!Total!!Female!!21 years'] +
-                      df['Estimate!!Total!!Female!!22 to 24 years'] +
-                      df['Estimate!!Total!!Female!!25 to 29 years'] +
-                      df['Estimate!!Total!!Female!!30 to 34 years'] +
-                      df['Estimate!!Total!!Female!!35 to 39 years'] +
-                      df['Estimate!!Total!!Female!!40 to 44 years'] +
-                      df['Estimate!!Total!!Female!!45 to 49 years'] +
-                      df['Estimate!!Total!!Female!!50 to 54 years'] +
-                      df['Estimate!!Total!!Female!!55 to 59 years'] +
-                      df['Estimate!!Total!!Female!!60 and 61 years'] +
-                      df['Estimate!!Total!!Female!!62 to 64 years'],
-                'female_elderly': df['Estimate!!Total!!Female!!65 and 66 years'] +
-                      df['Estimate!!Total!!Female!!67 to 69 years'] +
-                      df['Estimate!!Total!!Female!!70 to 74 years'] +
-                      df['Estimate!!Total!!Female!!75 to 79 years'] +
-                      df['Estimate!!Total!!Female!!80 to 84 years'] +
-                      df['Estimate!!Total!!Female!!85 years and over'],
-                'low_travel_time': df['Estimate!!Total!!Less than 5 minutes'] +
-                       df['Estimate!!Total!!5 to 9 minutes'] +
-                       df['Estimate!!Total!!10 to 14 minutes'] +
-                       df['Estimate!!Total!!15 to 19 minutes'] +
-                       df['Estimate!!Total!!20 to 24 minutes'],
-                'med_travel_time': df['Estimate!!Total!!25 to 29 minutes'] +
-                       df['Estimate!!Total!!30 to 34 minutes'] +
-                       df['Estimate!!Total!!35 to 39 minutes'] +
-                       df['Estimate!!Total!!40 to 44 minutes'] +
-                       df['Estimate!!Total!!45 to 59 minutes'],
-                'high_travel_time': df['Estimate!!Total!!60 to 89 minutes'] +
-                        df['Estimate!!Total!!90 or more minutes'],
-                'below_pov': df['hhinc_00_10K'] + df['hhinc_10_15K'] +
-                             df['hhinc_15_20K'] + df['hhinc_20_25K'],
-                'below_med': df['hhinc_25_30K'] + df['hhinc_30_35K'] +
-                             df['hhinc_35_40K'] + df['hhinc_40_45K'] +
-                             df['hhinc_45_50K'] + df['hhinc_50_60K'],
-                'above_med': df['hhinc_60_75K'] + df['hhinc_75_100K'],
-                'high_inc': df['hhinc_100_125K'] + df['hhinc_125_150K'] + 
-                            df['hhinc_150_200K']}
-    #we need to add total respondents for this section
-    #total_bachelors = 'Estimate!!Total_y'
+
+    agg_dict = {'male_children': ['Estimate!!Total!!Male!!Under 5 years', 'Estimate!!Total!!Male!!5 to 9 years',
+                                  'Estimate!!Total!!Male!!10 to 14 years', 'Estimate!!Total!!Male!!15 to 17 years'],
+                'male_working': ['Estimate!!Total!!Male!!18 and 19 years', 'Estimate!!Total!!Male!!20 years',
+                                 'Estimate!!Total!!Male!!21 years', 'Estimate!!Total!!Male!!22 to 24 years',
+                                 'Estimate!!Total!!Male!!25 to 29 years', 'Estimate!!Total!!Male!!30 to 34 years',
+                                 'Estimate!!Total!!Male!!35 to 39 years', 'Estimate!!Total!!Male!!40 to 44 years',
+                                 'Estimate!!Total!!Male!!45 to 49 years', 'Estimate!!Total!!Male!!50 to 54 years',
+                                 'Estimate!!Total!!Male!!55 to 59 years', 'Estimate!!Total!!Male!!60 and 61 years',
+                                 'Estimate!!Total!!Male!!62 to 64 years'], 
+                'male_elderly': ['Estimate!!Total!!Male!!65 and 66 years', 'Estimate!!Total!!Male!!67 to 69 years', 
+                                 'Estimate!!Total!!Male!!70 to 74 years', 'Estimate!!Total!!Male!!75 to 79 years', 
+                                 'Estimate!!Total!!Male!!80 to 84 years', 'Estimate!!Total!!Male!!85 years and over'],
+                'female_children': ['Estimate!!Total!!Female!!Under 5 years', 'Estimate!!Total!!Female!!5 to 9 years',
+                                   'Estimate!!Total!!Female!!10 to 14 years', 'Estimate!!Total!!Female!!15 to 17 years'],
+                'female_working': ['Estimate!!Total!!Female!!18 and 19 years', 'Estimate!!Total!!Female!!20 years',
+                                   'Estimate!!Total!!Female!!21 years', 'Estimate!!Total!!Female!!22 to 24 years', 
+                                   'Estimate!!Total!!Female!!25 to 29 years', 'Estimate!!Total!!Female!!30 to 34 years', 
+                                   'Estimate!!Total!!Female!!35 to 39 years', 'Estimate!!Total!!Female!!40 to 44 years', 
+                                   'Estimate!!Total!!Female!!45 to 49 years', 'Estimate!!Total!!Female!!50 to 54 years',
+                                   'Estimate!!Total!!Female!!55 to 59 years', 'Estimate!!Total!!Female!!60 and 61 years', 
+                                   'Estimate!!Total!!Female!!62 to 64 years'],
+                'female_elderly': ['Estimate!!Total!!Female!!65 and 66 years', 'Estimate!!Total!!Female!!67 to 69 years', 
+                                   'Estimate!!Total!!Female!!70 to 74 years', 'Estimate!!Total!!Female!!75 to 79 years', 
+                                   'Estimate!!Total!!Female!!80 to 84 years', 'Estimate!!Total!!Female!!85 years and over'],
+                'low_travel_time': ['Estimate!!Total!!Less than 5 minutes', 'Estimate!!Total!!5 to 9 minutes', 
+                                      'Estimate!!Total!!10 to 14 minutes', 'Estimate!!Total!!15 to 19 minutes', 
+                                      'Estimate!!Total!!20 to 24 minutes'],
+                'med_travel_time': ['Estimate!!Total!!25 to 29 minutes', 'Estimate!!Total!!30 to 34 minutes', 
+                                    'Estimate!!Total!!35 to 39 minutes', 'Estimate!!Total!!40 to 44 minutes', 
+                                    'Estimate!!Total!!45 to 59 minutes'],
+                'high_travel_time': ['Estimate!!Total!!60 to 89 minutes', 'Estimate!!Total!!90 or more minutes'],
+                'below_pov': ['hhinc_00_10K', 'hhinc_10_15K', 'hhinc_15_20K', 'hhinc_20_25K'],
+                'below_med': ['hhinc_25_30K', 'hhinc_30_35K', 'hhinc_35_40K', 'hhinc_40_45K', 'hhinc_45_50K', 'hhinc_50_60K'],
+                'above_med': ['hhinc_60_75K', 'hhinc_75_100K'],
+                'high_inc': ['hhinc_100_125K', 'hhinc_125_150K', 'hhinc_150_200K']}
+
+    denoms = {'total_male': 'Estimate!!Total!!Male',
+              'total_female': 'Estimate!!Total!!Female',
+              'total_travel_time': 'Estimate!!Total_x',
+              'total_inc': 'hhinc_respondents'}
+
     desired_cols = ['block_group']
-    for col in agg_dict.keys():
-        df[col] = agg_dict[col]
-        if col in ['male_children', 'male_working', 'male_children']:
-            denom = total_male
-        if col in ['female_children', 'female_working', 'female_children']:
-            denom = total_female
-        if col in ['low_travel_time', 'med_travel_time', 'high_travel_time']:
-            denom = total_travel_time
-        if col in ['below_pov', 'below_med', 'above_med', 'high_inc']:
-            denom = total_inc
-        new_col = 'pct_' + col
-        df[new_col] = df[col] / df[denom] * 100
+    for col_name, col_list in agg_dict.items():
+        if col_name in ['male_children', 'male_working', 'male_children']:
+            denom = denoms['total_male']
+        if col_name in ['female_children', 'female_working', 'female_children']:
+            denom = denoms['total_female']
+        if col_name in ['low_travel_time', 'med_travel_time', 'high_travel_time']:
+            denom = denoms['total_travel_time']
+        if col_name in ['below_pov', 'below_med', 'above_med', 'high_inc']:
+            denom = denoms['total_inc']
+        new_col = 'pct_' + col_name
+        df[new_col] = df[col_list].agg('sum', axis=1) / df[denom] * 100
         desired_cols.append(new_col)
     for col in ['race_white', 'race_black', 'race_asian']:
         new_col = 'pct_' + col
@@ -112,13 +82,37 @@ def process_census(acs_csv='acs_17.csv'):
     return df[desired_cols]
 
 
+KEEP_COLS = ['Date', 'Primary Type', 'Latitude', 'Longitude', 'Domestic', 'Arrest']
+
+def process_crime(blocks_df, col, start_time, end_time, crimes_csv='crimes.csv', col_lst=KEEP_COLS):
+    '''
+    '''
+    crime_df = pd.read_csv(crimes_csv, parse_dates=['Date'])
+    crime_df = crime_df[col_lst]
+    crime_df = crime_df[(crime_df[date_col] >= start_time)
+                            & (crime_df[date_col] <= end_time)]
+    crime_df.dropna(subset=['Latitude', 'Longitude'], inplace=True)
+    blocks_df = gpd.GeoDataFrame(blocks_df, geometry='the_geom')
+    crime_df["the_geom"] = crime_df.apply(lambda row: Point(float(row["Longitude"]), float(row["Latitude"])), axis=1)
+    crime_gdf = gpd.GeoDataFrame(crime_df).set_geometry("the_geom")
+    joined = gpd.sjoin(crime_gdf, blocks_df, how="left", op='intersects').drop(columns="index_right")
+    #Finds percentage of each type of crime and total number of crimes per block group
+    type_grouped = joined.groupby('block_group')['Primary Type'].value_counts().unstack(fill_value=0)
+    type_pct = type_grouped.div(type_grouped.sum(axis=1), axis=0)  
+    type_pct['total'] = type_grouped.sum(axis=1)
+    # Finds the percentage of Domestic & Arrests (via mean)
+    means = joined.groupby('block_group').mean()
+    # Combines 3 grouped dataframes
+    combined = pd.merge(type_pct, means, on='block_group')
+    return combined
+
 
 col_types = {'ACCOUNT NUMBER': str, 'SITE NUMBER': int, 'LICENSE CODE': str,
              'ADDRESS': str, 'APPLICATION TYPE': str, 
              'APPLICATION REQUIREMENTS COMPLETE': str,
-               'LICENSE TERM START DATE': str , 'LICENSE STATUS' : str,
-               'LICENSE TERM EXPIRATION DATE': str, 'DATE ISSUED': str,
-               'LONGITUDE': str, 'LATITUDE': str}
+             'LICENSE TERM START DATE': str , 'LICENSE STATUS' : str,
+             'LICENSE TERM EXPIRATION DATE': str, 'DATE ISSUED': str,
+             'LONGITUDE': str, 'LATITUDE': str}
 
 def process_business():
     '''
@@ -205,6 +199,17 @@ def process_blocks():
     gdf = gpd.GeoDataFrame(df).set_geometry("the_geom").drop(columns=df.columns.difference(["block_group", "the_geom"]))
     gdf = gpd.GeoDataFrame(gdf).set_geometry('the_geom')
     return gdf
+
+
+# Join blocks and census first so we can impute the zeros for census data prior to join w/ business_df
+
+def join_chiblocks_census(census_df, blocks_df):
+    '''
+    Joins the ACS data with the Chicago block groups data and fills any nulls with zeros.
+    (nulls are due to no population)
+    '''
+    joined = pd.merge(census_df, blocks_df, on='block_group', how="outer")
+    return joined.fillna(value=0)
 
 
 def join_with_block_groups(business_df, blocks_df):
