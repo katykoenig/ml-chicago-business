@@ -164,9 +164,9 @@ class Storefronts:
                     MIN(issue_date) AS earliest_issue, 
                     MAX(expiry_date) AS latest_issue 
                 FROM licenses 
-                GROUP BY account_number, site_number 
                 WHERE DATETIME(expiry_date) >= DATETIME('{l_bound}') 
                 AND DATETIME(issue_date) < DATETIME('{u_bound}') 
+                GROUP BY account_number, site_number 
             ), 
             sf_ids_locs AS ( 
                 SELECT 
