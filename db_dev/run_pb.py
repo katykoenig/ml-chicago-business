@@ -19,16 +19,16 @@ import chicago_entrepreneurship_pb_constants as cepbk
 
 def run_entrepreneurship_pipeline(arguments):
 
-    # Load pipeline and set methods set.
+    # Load pipeline and set methods and target variable.
     ce = cepb.Plumbum("chicago entrepreneurship")
     ce.methods = cepbk.select_methods
+    ce.target_variable = "successful"
     # Set temporal splits.
     tl_bound = np.datetime64(arguments.tl_bound)
     tu_bound = np.datetime64(arguments.tu_bound)
     vl_bound = np.datetime64(arguments.vl_bound)
     vu_bound = np.datetime64(arguments.vu_bound)
-    temporal_splits = (tl_bound, tu_bound, vl_bound, vu_bound)
-    ce.temporal_splits = temporal_splits
+    ce.temporal_splits = (tl_bound, tu_bound, vl_bound, vu_bound)
     # Model on this temporal split.
     ce.classify()
 
