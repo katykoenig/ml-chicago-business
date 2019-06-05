@@ -2,5 +2,5 @@
 .ipynb_checkpoints/*
 data/
 data/*
-*.csv
+*.sqlite3
 __pycache__/
