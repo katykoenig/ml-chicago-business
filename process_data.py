@@ -8,7 +8,7 @@ from dateutil.relativedelta import relativedelta
 from datetime import datetime
 
 
-def process_census(acs_csv='acs_17.csv'):
+def process_census(acs_csv='acs_13.csv'):
     '''
     Reads in the ACS census data from csv, creating bins for specified features
     and finds percentages for these features
@@ -83,14 +83,15 @@ def process_census(acs_csv='acs_17.csv'):
 
 
 KEEP_COLS = ['Date', 'Primary Type', 'Latitude', 'Longitude', 'Domestic', 'Arrest']
-
-def process_crime(blocks_df, col, start_time, end_time, crimes_csv='crimes.csv', col_lst=KEEP_COLS):
+def process_crime(blocks_df, date_col, business_df, col_lst=KEEP_COLS):
     '''
     '''
-    crime_df = pd.read_csv(crimes_csv, parse_dates=['Date'])
+    crime_df = pd.read_csv('crimes.csv', parse_dates=['Date'], infer_datetime_format=True, keep_date_col=True)
     crime_df = crime_df[col_lst]
-    crime_df = crime_df[(crime_df[date_col] >= start_time)
-                            & (crime_df[date_col] <= end_time)]
+    start_time = business_df['earliest_issue'].min()
+    end_time = business_df['earliest_issue'].max()
+    crime_df = crime_df[(crime_df['Date'] >= start_time) \
+                            & (crime_df['Date'] <= end_time)]
     crime_df.dropna(subset=['Latitude', 'Longitude'], inplace=True)
     blocks_df = gpd.GeoDataFrame(blocks_df, geometry='the_geom')
     crime_df["the_geom"] = crime_df.apply(lambda row: Point(float(row["Longitude"]), float(row["Latitude"])), axis=1)
@@ -104,7 +105,32 @@ def process_crime(blocks_df, col, start_time, end_time, crimes_csv='crimes.csv',
     means = joined.groupby('block_group').mean()
     # Combines 3 grouped dataframes
     combined = pd.merge(type_pct, means, on='block_group')
-    return combined.loc[:, ~combined.columns.isin(['Latitude', 'Longitude'])]
+    combined = combined.loc[:, ~combined.columns.isin(['Latitude', 'Longitude', 'Date'])]
+    # Merge w/ business df
+    combined = pd.merge(combined, business_df, right_on='block_group', left_on='block')
+    # Merge w/ census
+    census = process_census()
+    total_df = pd.merge(combined, census, on='block_group')
+    total_df.drop(columns='block', inplace=True)
+    return total_df
+
+
+
+DATE_LST =['earliest_issue', 'latest_expiry']
+INT_LST = ['block']
+def clean_types(dataframe, date_cols=DATE_LST, int_cols=INT_LST):
+    '''
+    Used to clean the business data when imported from csv
+    '''
+    dataframe.dropna(inplace=True)
+    for d_col in date_cols:
+        dataframe[d_col] = pd.to_datetime(dataframe[d_col], infer_datetime_format=True, coerce=True)
+    for i_col in int_cols:
+        dataframe[i_col] = dataframe[i_col].astype(int)
+    return dataframe
+
+
+
 
 
 col_types = {'ACCOUNT NUMBER': str, 'SITE NUMBER': int, 'LICENSE CODE': str,
