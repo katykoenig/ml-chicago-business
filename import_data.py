@@ -36,10 +36,13 @@ def get_acs_data(df, ACS_API):
         "get": ",".join(var for var in df.Variable.to_list()),
         "for": "block group:*",
         "in": "state:17 county:031"} # Cook County, Illinois
-    request = requests.get(ACS_API, params=parameters)
-    data = request.json()
-    cols = data.pop(0)[-4:]
-    return pd.DataFrame(data, columns=df.Description.to_list() + cols)
+    try:
+        request = requests.get(ACS_API, params=parameters)
+        data = request.json()
+        cols = data.pop(0)[-4:]
+        return pd.DataFrame(data, columns=df.Description.to_list() + cols)
+    except:
+        return None
 
 
 def compile_census_data(acs_variables, year):
@@ -50,7 +53,10 @@ def compile_census_data(acs_variables, year):
     data = []
     for i in range(acs_variables['Dataset'].max()): #loop over ACS tables
         current = acs_variables[acs_variables['Dataset'] == i+1]
-        data.append(get_acs_data(current, ACS_API))
+        print(current)
+        result = get_acs_data(current, ACS_API)
+        if result:
+            data.append(result)
     merged = reduce(lambda left, right: pd.merge(left, right, how='outer', on=LOCATION_VARIABLES), data)
     merged["block_group"] = merged.apply(lambda row: "".join(str(row[var]) for var in LOCATION_VARIABLES), axis=1)
     return merged.drop(columns=LOCATION_VARIABLES)
