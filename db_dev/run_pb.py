@@ -28,7 +28,7 @@ def run_entrepreneurship_pipeline(arguments):
     tu_bound = np.datetime64(arguments.tu_bound)
     vl_bound = np.datetime64(arguments.vl_bound)
     vu_bound = np.datetime64(arguments.vu_bound)
-    ce.temporal_splits = (tl_bound, tu_bound, vl_bound, vu_bound)
+    ce.temporal_splits = [(tl_bound, tu_bound, vl_bound, vu_bound)]
     # Model on this temporal split otherwise.
     if not arguments.skip_model:
         ce.classify()

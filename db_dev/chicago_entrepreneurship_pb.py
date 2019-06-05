@@ -315,6 +315,7 @@ class Plumbum:
         # Generate models with temporal validation. Note that this specific 
         # implementation does not support out-of-sample validation.
         for t_index, temporal_split in enumerate(self._temporal_splits):
+            tl_bound, tu_bound, vl_bound, vu_bound = temporal_split
             # Request and generate features on the training data.
             train_set, train_set_feature_map = self._generate_features(
                 data=self._db_request(*temporal_split, train=True)
@@ -337,7 +338,7 @@ class Plumbum:
                 o_thold
             )
         # Plot curves of the best models and return their classifiers.
-        return self._unpack_best_models()
+        # return self._unpack_best_models()
 
 
     def _db_request(self, tl_bound, tu_bound, vl_bound, vu_bound, train):
@@ -1088,7 +1089,7 @@ class Plumbum:
                     prefix = (
                         " ".join(evaluation["method"].split(" ")).title() +
                         " (t=" + str(t_index) + "," + 
-                        " p=" + evaluation["p_index"] + "): "
+                        " p=" + str(evaluation["p_index"]) + "): "
                     )
                     # Plot precision and recall curves.
                     pbp._plot_curves(
