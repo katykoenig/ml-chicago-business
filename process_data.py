@@ -124,9 +124,10 @@ def clean_types(dataframe, date_cols=DATE_LST, int_cols=INT_LST):
     '''
     dataframe.dropna(inplace=True)
     for d_col in date_cols:
-        dataframe[d_col] = pd.to_datetime(dataframe[d_col], infer_datetime_format=True, coerce=True)
+        dataframe[d_col] = pd.to_datetime(dataframe[d_col], infer_datetime_format=True, errors='coerce')
     for i_col in int_cols:
-        dataframe[i_col] = dataframe[i_col].astype(int)
+        pass
+        #dataframe[i_col] = dataframe[i_col].astype(int)
     return dataframe
 
 

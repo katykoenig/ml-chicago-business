@@ -22,6 +22,8 @@ def get_chicago_data():
             print(key, 'download complete')
             if key == 'business':
                 df = df[df['CITY'] == 'CHICAGO']
+            if key == 'crimes':
+                df = df[df['Date'] > '1/1/2010']
             df.to_csv(key + '.csv')
             print(key, 'saved')
         else:
