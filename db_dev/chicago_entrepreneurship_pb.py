@@ -318,16 +318,12 @@ class Plumbum:
             tl_bound, tu_bound, vl_bound, vu_bound = temporal_split
             # Request and generate features on the training data.
             train_set, train_set_feature_map = self._generate_features(
-                data=self._db_request(
-                    tl_bound, tu_bound, vl_bound, vu_bound, train=True
-                )
+                data=self._db_request(*temporal_split, train=True)
             )
             # Request and generate features on the validation data per the
             # approach learned on the training data.
             valid_set, _ = self._generate_features(
-                data=self._db_request(
-                    tl_bound, tu_bound, vl_bound, vl_bound, train=False
-                ),
+                data=self._db_request(*temporal_split, train=False),
                 feature_map=train_set_feature_map
             )
             # Split data and validate methods for either supervised or
