@@ -16,6 +16,12 @@ Patrick Lavallee Delgado
 University of Chicago, CS & Harris MSCAPP '20
 June 2019
 
+To do:
+1. Create table of crimes by month by block for Eric.
+2. Download ACS data.
+3. Add count for arrest, domestic.
+4. Add count of total crimes.
+
 '''
 
 import os
@@ -315,7 +321,6 @@ class Plumbum:
         # Generate models with temporal validation. Note that this specific 
         # implementation does not support out-of-sample validation.
         for t_index, temporal_split in enumerate(self._temporal_splits):
-            tl_bound, tu_bound, vl_bound, vu_bound = temporal_split
             # Request and generate features on the training data.
             train_set, train_set_feature_map = self._generate_features(
                 data=self._db_request(*temporal_split, train=True)
