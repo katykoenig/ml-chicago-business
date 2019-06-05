@@ -28,187 +28,6 @@ def survive_two_years(df):
     df['exists_2_yrs'] = df['days_alive'] > 731
     df['exists_2_yrs'] = df['exists_2_yrs'].astype(int)
 
-
-def temporal_validate(dataframe, col, window, val_time):
-    '''
-    Creates list of for start and end dates for training and testing sets of the data.
-    Inputs:
-        dataframe: a pandas dataframe
-        col: date column
-        window (integer): length of time for which we are predicting
-        val_time (integer): length of time in which it takes to validate a project
-    Outputs:
-        dates_lst: a list of dates representing traning and testing start dates for testing set
-    '''
-    # First we initialize the start date as the earliest date in the df
-    train_start_time = dataframe[col].min()
-    # We never want any set to have a date that is larger than the latest date
-    #in the set so we find the end time below
-    end_time = dataframe[col].max()
-    # We subtract 2 days in initialized our train)end_time (as well as our test_end_time:
-    # 1 day for finding dates under our val_time (e.g. 59 in our data here)
-    # 1 day for ensure no overlap between testing and training dates
-    train_end_time = train_start_time + relativedelta(months=+window, days=-(val_time+2))
-    test_start_time = train_end_time + relativedelta(days=+val_time+2)
-    test_end_time = test_start_time + relativedelta(months=+window, days=-val_time-2)
-    dates_lst = [(train_start_time, train_end_time, test_start_time, test_end_time)]
-    # While loop below ensures that we never iterate past our max date in our column
-    while end_time >= test_start_time + relativedelta(months=+window):
-        train_end_time = test_end_time
-        test_start_time += relativedelta(months=+window)
-        test_end_time = test_start_time + relativedelta(months=+window, days=-val_time-2)
-        dates_lst.append((train_start_time, train_end_time, test_start_time, test_end_time))
-    return dates_lst
-
-
-def split_and_clean_data(dataframe, date_col, date, dummy_lst, discretize_lst, target_att, drop_lst):
-    '''
-    Splits data into testing and training datasets and cleans/processes
-    each training and testing individually
-    Inputs:
-        dataframe: a pandas dataframe
-        date_col: column name which is relevant for the splitting into test/train sets
-        date: tuple for dates on which training and testing sets are split
-        dummy_lst: list of column names to be converted to dummy variables
-        discretize_lst: list of column names to be discretized
-        target_att: outcome variable to be prediced (a column name)
-        drop_lst: list of column names to not be considered features
-    Output:
-        x_train: pandas dataframe with only features columns of training data
-        x_test: pandas dataframe with only features columns of testing data
-        y_train: pandas series with outcome column of training data
-        y_test: pandas series with outcome column of testing data
-    '''
-    train_start_time = date[0]
-    train_end_time = date[1]
-    test_start_time = date[2]
-    test_end_time = date[3]
-    # Divides full dataframe into training dataframe
-    training_df = dataframe[(dataframe[date_col] >= train_start_time)
-                            & (dataframe[date_col] <= train_end_time)]
-    # Cleans (makes dummies, discretizes columns) post-division into training/testing
-    processed_training, _, training_dict = preprocess(training_df, dummy_lst, discretize_lst)
-    features_lst, processed_training = generate_features(processed_training, target_att, drop_lst)
-    x_train = processed_training[features_lst]
-    y_train = check_for_funding(training_df, timeframe=60)
-    testing_df = dataframe[(dataframe[date_col] >= test_start_time) & \
-                 (dataframe[date_col] <= test_end_time)]
-    processed_testing, _, testing_dict = preprocess(testing_df, dummy_lst, discretize_lst)
-    # We do not keep the first output (updated features list) for the testing
-    #as we only want to use features generated w/ the training set
-    _, processed_testing = discretize_dates(processed_testing, features_lst)
-    x_test = processed_testing[features_lst]
-    y_test = check_for_funding(testing_df, timeframe=60)
-    return x_train, x_test, y_train, y_test
-
-
-def change_date_type(dataframe):
-    '''
-    Converts columns with dates to datetime objects
-    Inputs: a pandas dataframe
-    Outputs: None
-    '''
-    for col in dataframe.columns:
-        if "date" in col:
-            dataframe[col] = pd.to_datetime(dataframe[col])
-
-
-def preprocess(dataframe, to_dummy_lst, cols_to_discretize):
-    '''
-    Preprocesses data through:
-        - Fills null values with median values across columns
-        - Cleans dataframe to drop very highly correlated variables
-    Input:
-        dataframe: a pandas dataframe
-        to_dummy_lst: a list of column names to be converted to dummy columns
-        cols_to_discretize: list of columns to be discretized
-    Outputs:
-        dataframe: a pandas dataframe
-        kept_col: set of columns to be kept in dataframe
-        master_dict: dictionary mapping binary encodings
-    '''
-    corr_df = dataframe.corr()
-    drop_lst = []
-    kept_col = []
-    dataframe.fillna(dataframe.median(), inplace=True)
-    # Loop below finds columns that exhibit (almost) perfect collinearity
-    # The columns are saved as a set that is returned by this function
-    for column in corr_df.columns:
-        drop_lst += (corr_df.index[(abs(corr_df[column]) > 0.95) & \
-                    (abs(corr_df[column]) < 1.00)].tolist())
-        to_drop = set(drop_lst)
-        kept_col += list(to_drop)[:1]
-    # Loop below drops one of the collinear columns
-    for column in to_drop:
-        if column not in kept_col:
-            dataframe.drop([column], axis=1, inplace=True)
-    dataframe = make_dummy_cat(dataframe, to_dummy_lst)
-    master_dict, dataframe = discretize_by_unique_val(dataframe, cols_to_discretize)
-    return dataframe, set(kept_col), master_dict
-
-
-def check_for_funding(dataframe, timeframe, col1='datefullyfunded',
-                      col2='date_posted', target_col='funded_by_deadline'):
-    '''
-    Checks if project funded within given time frame and creates a new column
-    on the dataframe reflecting this
-    Inputs:
-        dataframe: a pandas dataframe
-        timeframe: an integer representing the number of days allowed to pass
-        col1: column name with earlier/first date
-        col2: column name with later/second date (to be compared with date
-              in col1)
-        target_col: desired name for target/outcome column
-    Output:
-        pandas series with outcome column of testing data
-    '''
-    dataframe['val_col'] = dataframe[col1] - dataframe[col2]
-    dataframe['val_col'] = dataframe['val_col'].dt.days
-    make_dummy_cont(dataframe, 'val_col', target_col, timeframe)
-    return dataframe[target_col]
-
-
-def make_dummy_cont(dataframe, column, desired_col_name, cutoff):
-    '''
-    Creates new column of dummy variables where the value becomes 1 if above a
-    given cutoff point and 0 if below cutoff point and drops original column
-    Inputs:
-        dataframe: a pandas dataframe
-        column: name of column to be converted to dummy variable column
-        desired_col_name: new column name for dummy variable column
-        cutoff: cutoff point for which new column value becomes 1 if above
-                and 0 if below
-    Outputs: None
-    '''
-    dataframe[desired_col_name] = np.where(dataframe[column] > cutoff, 1, 0)
-    # We drop this column b/c it would exhibit perfect collinearity
-    # with the newly created column
-    dataframe.drop(column, axis=1, inplace=True)
-
-
-def discretize_by_unique_val(dataframe, cols_to_discretize):
-    '''
-    Discretizes categorical columns in col_lst to integer values
-     Inputs:
-        dataframe: a pandas dataframe
-        col_lst: list of column names to be discretized
-    Ouptuts:
-        master_dict: a dictionary with the column names, mapping the integer
-                     values to their meanings
-        dataframe: a pandas dataframe
-    '''
-    master_dict = {}
-    for col in cols_to_discretize:
-        discret_dict = {}
-        counter = 0
-        for i in dataframe[col].unique():
-            discret_dict[i] = counter
-            counter += 1
-        dataframe[col] = dataframe[col].map(discret_dict)
-        master_dict[col] = discret_dict
-    return master_dict, dataframe
-
-
 def discretize_dates(dataframe, features_lst):
     '''
     Converts datetime types into integer of month and adds new discretized
@@ -229,24 +48,6 @@ def discretize_dates(dataframe, features_lst):
         if new_col not in features_lst:
             features_lst.append("month_" + col[-6:])
     return features_lst, dataframe
-
-
-def make_dummy_cat(dataframe, col_lst):
-    '''
-    Creates new columns of dummy variables from categorical columns of the data
-    Inputs:
-        dataframe: a pandas dataframe
-        col_lst: list of columns to convert to dummy columns
-    Outputs: a pandas dataframe
-    '''
-    dfs_to_concat = [dataframe]
-    for column in col_lst:
-        dummy_df = pd.get_dummies(dataframe[column], prefix=column)
-        dfs_to_concat.append(dummy_df)
-    dataframe = pd.concat(dfs_to_concat, axis=1)
-    for column in col_lst:
-        dataframe.drop(column, axis=1, inplace=True)
-    return dataframe
 
 
 def generate_features(dataframe, target_att, drop_lst):
@@ -331,8 +132,8 @@ RESULTS_COLS = ['model', 'parameters', 'train_start', 'train_end', 'test_start',
                 'f1_score_at_50', 'auc_roc_at_50']
 
 
-def combining_function(date_lst, model_lst, dataframe, col, dummy_lst,
-                       discretize_lst, threshold_lst, target_att, drop_lst):
+def combining_function(date_lst, model_lst, dataframe, threshold_lst,
+                      target_att, train_df, test_df):
     '''
     Creates models, evaluates models and writes evaluation of models to csv.
     Input:
@@ -350,17 +151,11 @@ def combining_function(date_lst, model_lst, dataframe, col, dummy_lst,
     results_df = pd.DataFrame(columns=RESULTS_COLS)
     # Loop through dates and create appropriate splits while also
     # cleaning/processing AFTER split
-    check = []
     for date in date_lst:
-        x_train, x_test, y_train, y_test = split_and_clean_data(dataframe, col,
-                                                                date, dummy_lst,
-                                                                discretize_lst,
-                                                                target_att,
-                                                                drop_lst)
-        train_start = date[0]
-        train_end = date[1]
-        test_start = date[2]
-        test_end = date[3]
+        x_train = train_df.drop(column_name=[target_att, axis=1])
+        y_train = train_df[target_att]
+        x_test = test_df.drop(column_name=[target_att, axis=1])
+        y_test = test_df[target_att]
         # Loop through models and differing parameters
         # while fitting each model with split data
         for model in model_lst:
