@@ -1088,7 +1088,7 @@ class Plumbum:
                     prefix = (
                         " ".join(evaluation["method"].split(" ")).title() +
                         " (t=" + str(t_index) + "," + 
-                        " p=" + evaluation["p_index"] + "): "
+                        " p=" + str(evaluation["p_index"]) + "): "
                     )
                     # Plot precision and recall curves.
                     pbp._plot_curves(
