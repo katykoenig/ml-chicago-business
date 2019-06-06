@@ -446,8 +446,10 @@ class Plumbum:
         JOIN storefronts_location USING (sf_id) 
         JOIN storefronts_blocks USING (block) 
         WHERE last_location = 1;
-        '''.format(l_bound, u_bound, l_bound + interval, u_bound + interval, 
-        l_bound, u_bound, l_bound, u_bound)
+        '''
+        select_storefronts = \
+            select_storefronts.format(l_bound, u_bound, l_bound + interval, \
+                u_bound + interval, l_bound, u_bound, l_bound, u_bound)
         storefronts = pd.read_sql(select_storefronts, self._db_con)
         # Request and collect licenses extant in training period by storefront.
         select_storefronts_licenses = '''
@@ -459,21 +461,25 @@ class Plumbum:
             AND DATETIME(issue_date) < DATETIME('{}') 
             GROUP BY account_number, site_number 
         ) AS storefronts 
-        '''.format(l_bound, u_bound)
-        select_extant_licenses = self._db_cur.execute('''
+        '''
+        select_storefronts_licenses = \
+            select_storefronts_licenses.format(l_bound, u_bound)
+        select_extant_licenses = '''
             SELECT DISTINCT license_code 
             FROM licenses 
             WHERE DATETIME(expiry_date) >= DATETIME('{}') 
             AND DATETIME(issue_date) < DATETIME('{}') 
-            '''.format(tl_bound, tu_bound)
-        ) 
-        extant_licenses = select_extant_licenses.fetchall()
+            '''
+        select_extant_licenses = \
+            select_extant_licenses.format(tl_bound, tu_bound)
+        self._db_cur.execute(select_extant_licenses)
+        extant_licenses = self._db_cur.fetchall()
         # Request licenses individually and join relations in batches.
         licenses_join_complete = []
         licenses_join_queue = []
         for i, extant_license in enumerate(extant_licenses):
             license_lable = "_".join(extant_license[0].lower().split())
-            licenses_join_queue.append('''
+            left_join = '''
                 LEFT JOIN (
                     SELECT 
                         account_number || '-' || site_number AS sf_id, 
@@ -484,9 +490,9 @@ class Plumbum:
                     AND DATETIME(issue_date) < DATETIME('{}') 
                     GROUP BY account_number, site_number 
                 ) AS L_{} USING (sf_id) 
-                '''.format(license_lable, extant_license[0], l_bound, u_bound, 
-                license_lable)
-            ) 
+                '''
+            licenses_join_queue.append(left_join.format(license_lable, \
+                extant_license[0], l_bound, u_bound, license_lable))
             # Execute these joins at the join limit or with the last relation.
             if i % JOIN_LIMIT == 0 or i == len(extant_licenses) - 1:
                 batch = pd.read_sql(
@@ -530,7 +536,10 @@ class Plumbum:
         LEFT JOIN domestic USING (block) 
         LEFT JOIN arrest USING (block) 
         LEFT JOIN sum USING (block);
-        '''.format(tl_bound, tu_bound, tl_bound, tu_bound, tl_bound, tu_bound)
+        '''
+        select_crime_general = \
+            select_crime_general.format(tl_bound, tu_bound, tl_bound, \
+                tu_bound, tl_bound, tu_bound)
         crime_general = pd.read_sql(select_crime_general, self._db_con)
         select_crimes_blocks = '''
         SELECT * 
@@ -539,14 +548,16 @@ class Plumbum:
             FROM blocks
         ) AS blocks 
         '''
-        select_extant_crimes = self._db_cur.execute('''
+        select_extant_crimes = '''
             SELECT DISTINCT crime 
             FROM crimes 
             WHERE DATETIME(date) >= DATETIME('{}') 
             AND DATETIME(date) < DATETIME('{}');
-            '''.format(tl_ubound, tu_ubound)
-        )
-        extant_crimes = select_extant_crimes.fetchall()
+            '''
+        select_extant_crimes = \
+            select_extant_crimes.format(tl_bound, tu_bound)
+        self._db_cur.execute(select_extant_crimes)
+        extant_crimes = self._db_cur.fetchall()
         # Request crimes individually and join relations in batches.
         crimes_join_complete = [crime_general]
         crimes_join_queue = []
@@ -556,7 +567,7 @@ class Plumbum:
                 .replace("(", "").replace(")", "").replace("-", "") \
                 .split()
             )
-            crimes_join_queue.append('''
+            left_join = '''
                 LEFT JOIN (
                     SELECT block, 
                     COUNT(crime) AS crime_{} 
@@ -566,9 +577,9 @@ class Plumbum:
                 AND DATETIME(date) < DATETIME('{}') 
                 GROUP BY block 
                 ) AS C_{} USING (block) 
-                '''.format(crime_label, extant_crime[0], l_bound, u_bound, 
-                crime_label)
-            )
+                '''
+            crimes_join_queue.append(left_join.format(crime_label, \
+                extant_crime[0], l_bound, u_bound, crime_label))
             # Execute these joins at the join limit or with the last relation.
             if i % JOIN_LIMIT == 0 or i == len(extant_crimes) - 1:
                 batch = pd.read_sql(
