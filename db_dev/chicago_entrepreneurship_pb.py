@@ -16,12 +16,6 @@ Patrick Lavallee Delgado
 University of Chicago, CS & Harris MSCAPP '20
 June 2019
 
-To do:
-1. Create table of crimes by month by block for Eric.
-2. Download ACS data.
-3. Add count for arrest, domestic.
-4. Add count of total crimes.
-
 '''
 
 import os
@@ -361,8 +355,9 @@ class Plumbum:
 
         '''
 
-        # Set interval constant.
+        # Set interval and join limit constants.
         interval = self._temporal_interval
+        JOIN_LIMIT = 60
         # Convert np.datetime64 to pd.Timestamp for convenience.
         tl_bound = pd.Timestamp(tl_bound)
         tu_bound = pd.Timestamp(tu_bound)
@@ -373,9 +368,10 @@ class Plumbum:
             l_bound, u_bound = tl_bound, tu_bound
         else:
             l_bound, u_bound = vl_bound, vu_bound
-        # Request and collect storefronts in this period.
+        # Open connection.
         self._db_open()
-        temporal_select = f'''
+        # Request and collect storefronts in this period.
+        select_storefronts = f'''
         WITH 
             storefronts_general AS ( 
                 SELECT 
@@ -431,67 +427,109 @@ class Plumbum:
                 AND DATETIME(expiry_date) >= DATETIME('{l_bound}') 
                 AND DATETIME(issue_date) < DATETIME('{u_bound}') 
                 GROUP BY block 
-            ), 
-            storefronts_characteristics AS ( 
-                SELECT DISTINCT 
-                    sf_id, 
-                    earliest_issue, 
-                    latest_issue, 
-                    storefronts_on_block, 
-                    block, 
-                    successful 
-                FROM storefronts_success 
-                JOIN storefronts_location USING (sf_id) 
-                JOIN storefronts_blocks USING (block) 
-                WHERE last_location = 1 
-            ), 
-            temporal_storefronts_licenses AS (
-                SELECT 
-                    account_number || '-' || site_number AS sf_id, 
+            )
+        SELECT DISTINCT 
+            sf_id, 
+            earliest_issue, 
+            latest_issue, 
+            storefronts_on_block, 
+            block, 
+            successful 
+        FROM storefronts_success 
+        JOIN storefronts_location USING (sf_id) 
+        JOIN storefronts_blocks USING (block) 
+        WHERE last_location = 1;
         '''
-        # Request and collect licenses extant in training period.
+        storefronts = pd.read_sql(select_storefronts, self._db_con)
+        # Request and collect licenses extant in training period by storefront.
+        select_storefronts_licenses = f'''
+        SELECT * 
+        FROM ( 
+            SELECT account_number || '-' || site_number AS sf_id 
+            FROM licenses 
+            WHERE DATETIME(expiry_date) >= DATETIME('{l_bound}') 
+            AND DATETIME(issue_date) < DATETIME('{u_bound}') 
+            GROUP BY account_number, site_number 
+        ) AS storefronts 
+        '''
         select_extant_licenses = self._db_cur.execute(f'''
             SELECT DISTINCT license_code 
             FROM licenses 
             WHERE DATETIME(expiry_date) >= DATETIME('{tl_bound}') 
             AND DATETIME(issue_date) < DATETIME('{tu_bound}') 
             '''
-        )
-        extant_licenses = []
-        for extant_license in select_extant_licenses.fetchall():
+        ) 
+        extant_licenses = select_extant_licenses.fetchall()
+        # Request licenses individually and join relations in batches.
+        licenses_join_complete = []
+        licenses_join_queue = []
+        for i, extant_license in enumerate(extant_licenses):
             license_lable = "_".join(extant_license[0].lower().split())
-            extant_licenses.append(f'''
-                    CASE WHEN 
-                        account_number || '-' || site_number IN (
-                            SELECT 
-                                account_number || '-' || site_number 
-                            FROM licenses 
-                            WHERE license_code = '{extant_license[0]}' 
-                            AND DATETIME(expiry_date) >= DATETIME('{l_bound}') 
-                            AND DATETIME(issue_date) < DATETIME('{u_bound}') 
-                        )
-                        THEN 1 
-                        ELSE 0 
-                    END license_{license_lable} 
-            '''
-            )
-        temporal_select += ", ".join(extant_licenses)
-        temporal_select += f'''
-                FROM licenses 
-                WHERE DATETIME(expiry_date) >= DATETIME('{l_bound}') 
-                AND DATETIME(issue_date) < DATETIME('{u_bound}') 
-                GROUP BY account_number, site_number 
+            licenses_join_queue.append(f'''
+                LEFT JOIN (
+                    SELECT 
+                        account_number || '-' || site_number AS sf_id, 
+                        COUNT(license_code) AS license_{license_lable} 
+                    FROM licenses 
+                    WHERE license_code = '{extant_license[0]}' 
+                    AND DATETIME(expiry_date) >= DATETIME('{l_bound}') 
+                    AND DATETIME(issue_date) < DATETIME('{u_bound}') 
+                    GROUP BY account_number, site_number 
+                ) AS L_{license_lable} USING (sf_id) 
+                '''
+            ) 
+            # Execute these joins at the join limit or with the last relation.
+            if i % JOIN_LIMIT == 0 or i == len(extant_licenses) - 1:
+                batch = pd.read_sql(
+                    select_storefronts_licenses + " ".join(licenses_join_queue),
+                    self._db_con
+                )
+                licenses_join_complete.append(batch.fillna(0))
+                licenses_join_queue = []
+        # Merge batches into one dataframe.
+        licenses = licenses_join_complete.pop()
+        for batch in licenses_join_complete:
+            licenses = licenses.merge(batch, on="sf_id")
+        # Request and collect crimes extant in training period by block.
+        select_crime_general = f'''
+        WITH 
+            domestic AS ( 
+                SELECT block, COUNT(domestic) AS domestic_sum 
+                FROM crimes 
+                WHERE DATETIME(date) >= DATETIME('{tl_bound}') 
+                AND DATETIME(date) < DATETIME('{tu_bound}') 
+                AND domestic = 'True' 
+                GROUP BY block 
             ), 
-            storefronts_licenses_characteristics AS ( 
-                SELECT * 
-                FROM storefronts_characteristics 
-                JOIN temporal_storefronts_licenses USING (sf_id) 
-            ), 
-            temporal_blocks_crimes AS (
-                SELECT 
-                    block, 
+            arrest AS ( 
+                SELECT block, COUNT(arrest) AS arrest_sum 
+                FROM crimes 
+                WHERE DATETIME(date) >= DATETIME('{tl_bound}') 
+                AND DATETIME(date) < DATETIME('{tu_bound}') 
+                AND arrest = 'True' 
+                GROUP BY block 
+            ),
+            sum AS (
+                SELECT block, COUNT(crime) AS crime_sum 
+                FROM crimes 
+                WHERE DATETIME(date) >= DATETIME('{tl_bound}') 
+                AND DATETIME(date) < DATETIME('{tu_bound}') 
+                GROUP BY block 
+            ) 
+        SELECT DISTINCT block 
+        FROM blocks 
+        LEFT JOIN domestic USING (block) 
+        LEFT JOIN arrest USING (block) 
+        LEFT JOIN sum USING (block);
         '''
-        # Request and collect crimes extant in training period.
+        crime_general = pd.read_sql(select_crime_general, self._db_con)
+        select_crimes_blocks = f'''
+        SELECT * 
+        FROM (
+            SELECT DISTINCT block 
+            FROM blocks
+        ) AS blocks 
+        '''
         select_extant_crimes = self._db_cur.execute(f'''
             SELECT DISTINCT crime 
             FROM crimes 
@@ -499,42 +537,49 @@ class Plumbum:
             AND DATETIME(date) < DATETIME('{tu_bound}');
             '''
         )
-        extant_crimes = []
-        for extant_crime in select_extant_crimes.fetchall():
+        extant_crimes = select_extant_crimes.fetchall()
+        # Request crimes individually and join relations in batches.
+        crimes_join_complete = [crime_general]
+        crimes_join_queue = []
+        for i, extant_crime in enumerate(extant_crimes):
             crime_label = "_".join(
                 extant_crime[0].lower() \
                 .replace("(", "").replace(")", "").replace("-", "") \
                 .split()
             )
-            extant_crimes.append(f'''
-                    COUNT( 
-                        CASE WHEN 
-                            block IN ( 
-                                SELECT block 
-                                FROM crimes 
-                                WHERE crime = '{extant_crime[0]}' 
-                                AND DATETIME(date) >= DATETIME('{l_bound}') 
-                                AND DATETIME(date) < DATETIME('{u_bound}') 
-                            ) 
-                            THEN 1 
-                            ELSE 0 
-                        END 
-                    ) AS crime_{crime_label} 
-            '''
-            )
-        temporal_select += ", ".join(extant_crimes)
-        temporal_select += f'''
-                FROM blocks 
+            crimes_join_queue.append(f'''
+                LEFT JOIN (
+                    SELECT block, 
+                    COUNT(crime) AS crime_{crime_label} 
+                FROM crimes 
+                WHERE crime = '{extant_crime[0]}' 
+                AND DATETIME(date) >= DATETIME('{l_bound}') 
+                AND DATETIME(date) < DATETIME('{u_bound}') 
                 GROUP BY block 
-            ) 
-        SELECT * 
-        FROM storefronts_licenses_characteristics  
-        JOIN temporal_blocks_crimes USING (block); 
-        '''
-        # Execute temporal select.
-        data = pd.read_sql(temporal_select, self._db_con)
+                ) AS C_{crime_label} USING (block) 
+                '''
+            )
+            # Execute these joins at the join limit or with the last relation.
+            if i % JOIN_LIMIT == 0 or i == len(extant_crimes) - 1:
+                batch = pd.read_sql(
+                    select_crimes_blocks + " ".join(crimes_join_queue),
+                    self._db_con
+                )
+                crimes_join_complete.append(batch.fillna(0))
+                crimes_join_queue = []
+        # Merge batches into one dataframe.
+        crimes = crimes_join_complete.pop()
+        for batch in crimes_join_complete:
+            crimes = crimes.merge(batch, on="block")
+        # Request census data.
+        census = pd.read_sql("SELECT * FROM census", self._db_con)
+        # Close connection.
         self._db_close()
-        # Write temporal set lable.
+        # Join storefronts, licenses, crimes, census data.
+        data = storefronts.merge(licenses, on="sf_id").merge(crimes, on="block")
+        data["block_group"] = data["block"].apply(lambda x: x // 1000)
+        data = data.merge(census, on="block_group")
+        # Compose the filename for this temporal set.
         if train:
             set_type = "train"
         else:
@@ -542,6 +587,7 @@ class Plumbum:
         filename = "_".join(
             [set_type, str(l_bound.date()), str(u_bound.date())]
         )
+        # Save the dataframe to CSV and return the dataframe for modeling.
         data.to_csv(filename + ".csv", index=False)
         return data
 
