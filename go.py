@@ -31,8 +31,8 @@ def go(model=None):
         features_lst, train_df = pl.generate_features(test_df, ['successful','earliest_issue', 'latest_issue','sf_id', 'block_group'])
         thresh_lst = [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5]
         results_df = pl.combining_function(features_lst, models_to_run, thresh_lst, 'successful', train_df, test_df)
-        print('writing results for ' + pair[1])
+        print('Writing results for ' + pair[1])
         results_df.to_csv(pair[1] + 'results.csv')
         eval_lst = ['accuracy_at_5', 'precision_at_5', 'recall_at_5', 'f1_score_at_5', 'auc_roc_at_5']
-        # pl.results_eval(dataframe, results_df, 'date_posted', date_lst, to_dummy,
-        #             to_discretize, 'funded_by_deadline', to_drop, eval_lst)
+        print('Evaluating results for ' + pair[1])
+        pl.results_eval(results_df, eval_lst, train_df, test_df, 'successful', features_lst, pair[1])

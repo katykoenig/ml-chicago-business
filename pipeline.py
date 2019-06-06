@@ -185,8 +185,7 @@ def combining_function(features_lst, model_lst, threshold_lst, target_att, train
 #following site:
 #https://machinelearningmastery.com/roc-curves-and-precision-recall-curves-for-classification-in-python/
 
-def results_eval(dataframe, results_df, col, dates, dummy_lst, discretize_lst,
-                 target_att, drop_lst, evaluator_lst):
+def results_eval(dataframe, evaluator_lst, train_df, test_df, target_att, features_lst, date):
     '''
     Evaluates the results of the models run and creates AUC-ROC and
     precision-recall curves for models deemed best
@@ -202,23 +201,22 @@ def results_eval(dataframe, results_df, col, dates, dummy_lst, discretize_lst,
         evaluator_lst: list of evaluation metrics
     Outputs: None
     '''
-    for date in dates:
-        print("BEST MODELS FOR START TEST DATE " + str(date[2]))
-        x_train, x_test, y_train, y_test = split_and_clean_data(dataframe,
-                                                                col, date,
-                                                                dummy_lst,
-                                                                discretize_lst,
-                                                                target_att,
-                                                                drop_lst)
-        specified_df = results_df[results_df['test_start'] == date[2]]
+
+    _, test_df = discretize_dates(test_df, features_lst)
+    x_train = train_df[features_lst]
+    y_train = train_df[target_att]
+    x_test = test_df[features_lst]
+    y_test = test_df[target_att]
+    for i in results_df['test_set'].unique():
         for evaluator in evaluator_lst:
-            print("BEST MODEL FOR " + evaluator)
+            print("BEST MODEL FOR " + str(i) + ' with '+ evaluator)
             best_index = specified_df[evaluator].idxmax()
             best_mod = results_df.iloc[best_index, 0:2]
             print(best_mod)
             print(results_df.iloc[best_index, 17:22])
             print()
-            create_curves(best_mod[0], best_mod[1], x_train, y_train, x_test, y_test)
+            if i == 'full':
+                create_curves(best_mod[0], best_mod[1], x_train, y_train, x_test, y_test, date)
 
 
 def create_curves(model, params, x_train, y_train, x_test, y_test, threshold=.05):
@@ -246,7 +244,7 @@ def create_curves(model, params, x_train, y_train, x_test, y_test, threshold=.05
     fpr, tpr, _ = roc_curve(y_true_sorted, preds_at_k)
     plt.plot([0, 1], [0, 1], linestyle='--')
     plt.plot(fpr, tpr, marker='.')
-    roc_title = "ROC " + model + " with " + str(params)
+    roc_title = "ROC " + model + " with " + str(params) + date
     plt.title(roc_title)
     plt.savefig(roc_title + '.png')
     plt.clf()
@@ -289,7 +287,7 @@ def plot_precision_recall_n(y_true, y_score, model, params):
     ax1.set_ylim([0, 1])
     ax1.set_ylim([0, 1])
     ax2.set_xlim([0, 1])
-    p_r_title = "Precision-Recall " + model + " with " + str(params)
+    p_r_title = "Precision-Recall " + model + " with " + str(params) + date
     plt.title(p_r_title)
     plt.savefig(p_r_title + '.png')
     plt.clf()
