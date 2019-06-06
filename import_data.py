@@ -61,7 +61,7 @@ def compile_census_data(acs_variables, year):
     return merged.drop(columns=LOCATION_VARIABLES)
 
 
-def save_census_data():
+def save_census_data(acs_variables):
     '''
     '''
     acs_17 = compile_census_data(acs_variables, 2017)

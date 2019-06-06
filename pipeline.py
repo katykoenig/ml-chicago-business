@@ -20,13 +20,9 @@ from dateutil.relativedelta import relativedelta
 from sklearn.externals.six import StringIO
 import pydotplus
 from IPython.display import Image
+import process_data as pr
 
 
-def survive_two_years(df):
-    '''
-    '''
-    df['exists_2_yrs'] = df['days_alive'] > 731
-    df['exists_2_yrs'] = df['exists_2_yrs'].astype(int)
 
 def discretize_dates(dataframe, features_lst):
     '''
@@ -43,14 +39,14 @@ def discretize_dates(dataframe, features_lst):
     datetime_df = types_df[types_df[0] == 'datetime64[ns]']
     to_discretize = list(datetime_df['index'])
     for col in to_discretize:
-        new_col = "month_" + col[-6:]
+        new_col = "month" + col[-6:]
         dataframe[new_col] = dataframe[col].dt.month
         if new_col not in features_lst:
-            features_lst.append("month_" + col[-6:])
+            features_lst.append("month" + col[-6:])
     return features_lst, dataframe
 
 
-def generate_features(dataframe, target_att, drop_lst):
+def generate_features(dataframe, drop_lst):
     '''
     Generates the list of features/predictors to be used in training model
     Inputs:
@@ -60,8 +56,7 @@ def generate_features(dataframe, target_att, drop_lst):
     Output:
         features_lst: list of column names of features/predictors
     '''
-    features_lst = [i for i in list(dataframe.columns) if i != target_att
-                    if "id" not in i if 'date' not in i if i not in drop_lst]
+    features_lst = [i for i in list(dataframe.columns) if i not in drop_lst]
     return discretize_dates(dataframe, features_lst)
 
 
@@ -95,7 +90,7 @@ def joint_sort_descending(array_one, array_two):
 
 
 PARAMS_DICT = {
-    'random_forest': {'n_estimators': [10, 100, 1000], 'max_depth': [1, 5, 10],
+    'random_forest': {'n_estimators': [10, 100, 500], 'max_depth': [1, 5, 10],
                       'min_samples_split': [2, 5, 10], 'n_jobs': [-1]},
     'logistic_regression': {'penalty': ['l2'], 'C': [0.01, 0.1, 1, 10],
                             'solver': ['lbfgs']},
@@ -132,8 +127,27 @@ RESULTS_COLS = ['model', 'parameters', 'train_start', 'train_end', 'test_start',
                 'f1_score_at_50', 'auc_roc_at_50']
 
 
-def combining_function(date_lst, model_lst, dataframe, threshold_lst,
-                      target_att, train_df, test_df):
+bdict = {
+    'pct_high_travel_time': 0.95,
+    'pct_below_pov': 0.95,
+    'pct_race_black': 0.95,
+    'pct_high_inc': 0.95,
+    'pct_race_white': 0.10
+        }
+
+
+def get_special_index(x_test, boundary_dict=bdict):
+    results = {}
+    for col, percentile in boundary_dict.items():
+        print(col, percentile, x_test[col].quantile(percentile))
+        if percentile > 0.5:
+            results[col] = x_test[x_test[col] >= x_test[col].quantile(percentile)].index
+        else:
+            results[col] = x_test[x_test[col] <= x_test[col].quantile(percentile)].index
+    results['full'] = None
+    return results
+
+def combining_function2(features_lst, model_lst, threshold_lst, target_att, train_df, test_df):
     '''
     Creates models, evaluates models and writes evaluation of models to csv.
     Input:
@@ -149,41 +163,112 @@ def combining_function(date_lst, model_lst, dataframe, threshold_lst,
     Outputs: a pandas dataframe with the results of our models
     '''
     results_df = pd.DataFrame(columns=RESULTS_COLS)
-    # Loop through dates and create appropriate splits while also
-    # cleaning/processing AFTER split
-    for date in date_lst:
-        x_train = train_df.drop(column_name=[target_att, axis=1])
-        y_train = train_df[target_att]
-        x_test = test_df.drop(column_name=[target_att, axis=1])
-        y_test = test_df[target_att]
-        # Loop through models and differing parameters
-        # while fitting each model with split data
-        for model in model_lst:
-            print('Running model ' + model + ' for test start date ' + str(test_start))
-            clf = CLFS[model]
-            params_to_run = PARAMS_DICT[model]
-            # Loop through varying paramets for each model
-            for param in ParameterGrid(params_to_run):
-                row_lst = [model, param, train_start, train_end, test_start,
-                           test_end, np.mean(y_test)]
-                clf.set_params(**param)
-                clf.fit(x_train, y_train)
-                predicted_scores = clf.predict_proba(x_test)[:, 1]
-                total_lst = []
-                # Loop through thresholds,
-                # and generating evaluation metrics for each model
-                for threshold in threshold_lst:
-                    y_scores_sorted, y_true_sorted = joint_sort_descending(
-                        np.array(predicted_scores), np.array(y_test))
-                    preds_at_k = generate_binary_at_k(y_scores_sorted,
-                                                      threshold)
-                    acc = accuracy(y_true_sorted, preds_at_k)
-                    prec = precision_score(y_true_sorted, preds_at_k)
-                    recall = recall_score(y_true_sorted, preds_at_k)
-                    f_one = f1_score(y_true_sorted, preds_at_k)
-                    auc_roc = roc_auc_score(y_true_sorted, preds_at_k)
-                    total_lst += [acc, prec, recall, f_one, auc_roc]
-                results_df.loc[len(results_df)] = row_lst + total_lst
+    train_start = train_df['earliest_issue'].min()
+    train_end = train_df['earliest_issue'].max()
+    test_start = test_df['earliest_issue'].min()
+    test_end = test_df['earliest_issue'].max()
+    _, test_df = discretize_dates(test_df, features_lst)
+    x_train = train_df[features_lst]
+    y_train = train_df[target_att]
+    x_test = test_df[features_lst]
+    y_test = test_df[target_att]
+    # Loop through models and differing parameters
+    # while fitting each model with split data
+    for model in model_lst:
+        print('Running model ' + model + ' for test start date ' + str(test_start))
+        clf = CLFS[model]
+        params_to_run = PARAMS_DICT[model]
+        # Loop through varying paramets for each model
+        for param in ParameterGrid(params_to_run):
+            row_lst = [model, param, train_start, train_end, test_start,
+                       test_end, np.mean(y_test)]
+            clf.set_params(**param)
+            clf.fit(x_train, y_train)
+            subset_indexes = get_special_index(x_test)
+            for key, indx in subset_indexes:
+            	if key == 'full':
+            		sub_x_t = x_test
+            		sub_y_t = y_test
+            	else:
+            		sub_x_t = x_test[indx]
+            		sub_y_t = y_test[indx]
+
+	            predicted_scores = clf.predict_proba(sub_x_t)[:, 1]
+	            total_lst = []
+	            # Loop through thresholds,
+	            # and generating evaluation metrics for each model
+	            for population_type in filter_method:
+		            for threshold in threshold_lst:
+		                y_scores_sorted, y_true_sorted = joint_sort_descending(
+		                    np.array(predicted_scores), np.array(sub_y_t))
+		                preds_at_k = generate_binary_at_k(y_scores_sorted,
+		                                                  threshold)
+		                acc = accuracy(y_true_sorted, preds_at_k)
+		                prec = precision_score(y_true_sorted, preds_at_k)
+		                recall = recall_score(y_true_sorted, preds_at_k)
+		                f_one = f1_score(y_true_sorted, preds_at_k)
+		                auc_roc = roc_auc_score(y_true_sorted, preds_at_k)
+		                total_lst += [acc, prec, recall, f_one, auc_roc]
+		            results_df.loc[len(results_df)] = population_type + row_lst + total_lst
+    return results_df
+
+
+
+def combining_function(features_lst, model_lst, threshold_lst, target_att, train_df, test_df):
+    '''
+    Creates models, evaluates models and writes evaluation of models to csv.
+    Input:
+        date_lst: a list of dates on which to split training and testing data
+        model_lst: list of classifier models to run
+        dataframe: a pandas dataframe
+        col: target column for prediction
+        dummy_lst: list of column names to be converted to dummy variables
+        discretize_lst: list of column names to be discretized
+        threshold_lst: list of threshold values
+        target_att: outcome variable to be prediced (a column name)
+        drop_lst: list of column names to not be considered features
+    Outputs: a pandas dataframe with the results of our models
+    '''
+    results_df = pd.DataFrame(columns=RESULTS_COLS)
+    train_start = train_df['earliest_issue'].min()
+    train_end = train_df['earliest_issue'].max()
+    test_start = test_df['earliest_issue'].min()
+    test_end = test_df['earliest_issue'].max()
+    _, test_df = discretize_dates(test_df, features_lst)
+    x_train = train_df[features_lst]
+    y_train = train_df[target_att]
+    x_test = test_df[features_lst]
+    y_test = test_df[target_att]
+    # Loop through models and differing parameters
+    # while fitting each model with split data
+    for model in model_lst:
+        print('Running model ' + model + ' for test start date ' + str(test_start))
+        clf = CLFS[model]
+        params_to_run = PARAMS_DICT[model]
+        # Loop through varying paramets for each model
+        for param in ParameterGrid(params_to_run):
+            row_lst = [model, param, train_start, train_end, test_start,
+                       test_end, np.mean(y_test)]
+            clf.set_params(**param)
+            clf.fit(x_train, y_train)
+            predicted_scores = clf.predict_proba(x_test)[:, 1]
+
+            total_lst = []
+            # Loop through thresholds,
+            # and generating evaluation metrics for each model
+            for population_type in filter_method:
+	            for threshold in threshold_lst:
+	                y_scores_sorted, y_true_sorted = joint_sort_descending(
+	                    np.array(predicted_scores), np.array(y_test))
+	                preds_at_k = generate_binary_at_k(y_scores_sorted,
+	                                                  threshold)
+	                acc = accuracy(y_true_sorted, preds_at_k)
+	                prec = precision_score(y_true_sorted, preds_at_k)
+	                recall = recall_score(y_true_sorted, preds_at_k)
+	                f_one = f1_score(y_true_sorted, preds_at_k)
+	                auc_roc = roc_auc_score(y_true_sorted, preds_at_k)
+	                total_lst += [acc, prec, recall, f_one, auc_roc]
+	            results_df.loc[len(results_df)] = row_lst + total_lst
     return results_df
 
 
