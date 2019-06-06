@@ -5,24 +5,34 @@ import pipeline as pl
 import descriptive_stats as ds
 from dateutil.relativedelta import relativedelta
 
+DATA_LST = [('data/train_2010-01-01_2012-06-01.csv', 'data/valid_2014-05-31_2014-06-01.csv'),
+            ('data/train_2010-01-01_2013-06-01.csv', 'data/valid_2015-05-31_2015-06-01.csv'),
+            ('data/train_2010-01-01_2014-06-01.csv', 'data/valid_2016-05-31_2016-06-01.csv'),
+            ('data/train_2010-01-01_2015-06-01.csv', 'data/valid_2017-05-31_2017-06-01.csv')]
 
-def go():
+def go(model=None):
     '''
     '''
-    blocks = pr.process_blocks()
-    census = pr.process_census() #acs 13
-    train_df = pd.read_csv('train_test_sets/train_set_20170531.csv')
-    train_df = pr.clean_types(train_df)
-    test_df = pd.read_csv('train_test_sets/test_set_20170531.csv')
-    test_df = pr.clean_types(test_df)
-    
-    #join blocks and census
-    joined = pr.join_chiblocks_census(census, blocks)
-    
-    #this joins blocks and crimes
-    train = pr.process_crime(blocks, '',  train_df)
-    test = pr.process_crime(blocks, test_df)
-    
-    features_lst = pl.generate_features(test, 'successful', ['late_expiry'])
-    results_df = pl.combining_function('modelresults.csv', date, model_lst, joined, 'latest_date_issued', features_lst)
-    results_df.to_csv('results.csv')
+    if not model:
+        models_to_run = ['decision_tree', 'random_forest', 'knn',
+                         'logistic_regression', 'ada_boost', 'bagging']
+    elif model == 'all':
+        models_to_run = ['decision_tree', 'random_forest', 'knn',
+                         'logistic_regression', 'ada_boost',
+                         'gradient_boost', 'bagging']
+    else:
+        models_to_run = model
+
+    for pair in DATA_LST:
+        train_df = pd.read_csv(pair[0])
+        test_df = pd.read_csv(pair[1])
+        train_df = pr.clean_types(train_df)
+        test_df = pr.clean_types(test_df)
+        features_lst, train_df = pl.generate_features(test_df, ['successful','earliest_issue', 'latest_issue','sf_id', 'block_group'])
+        thresh_lst = [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5]
+        results_df = pl.combining_function(features_lst, models_to_run, thresh_lst, 'successful', train_df, test_df)
+        print('writing results for ' + pair[1])
+        results_df.to_csv(pair[1] + 'results.csv')
+        eval_lst = ['accuracy_at_5', 'precision_at_5', 'recall_at_5', 'f1_score_at_5', 'auc_roc_at_5']
+        # pl.results_eval(dataframe, results_df, 'date_posted', date_lst, to_dummy,
+        #             to_discretize, 'funded_by_deadline', to_drop, eval_lst)

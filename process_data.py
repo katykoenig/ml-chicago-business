@@ -82,6 +82,32 @@ def process_census(acs_csv='acs_13.csv'):
     return df[desired_cols]
 
 
+DATE_LST =['earliest_issue', 'latest_issue']
+def clean_types(dataframe, date_cols=DATE_LST):
+    '''
+    Used to clean the business data when imported from csv
+    '''
+    
+    dataframe['block_group'] = dataframe['block_group'].astype(str)
+    for d_col in date_cols:
+        dataframe[d_col] = pd.to_datetime(dataframe[d_col], infer_datetime_format=True, errors='coerce')
+    drop_lst = []
+    for column in dataframe.columns: 
+        if 'total' in column: 
+            drop_lst.append(column)
+    census = process_census()
+    joined = pd.merge(dataframe, census, on='block_group')
+    joined.drop(columns=['block'], inplace=True)
+    joined.fillna(0, inplace=True)
+    return joined.loc[:, ~joined.columns.isin(drop_lst)]
+
+
+
+
+
+
+
+
 KEEP_COLS = ['Date', 'Primary Type', 'Latitude', 'Longitude', 'Domestic', 'Arrest']
 def process_crime(blocks_df, date_col, business_df, col_lst=KEEP_COLS):
     '''
@@ -114,21 +140,6 @@ def process_crime(blocks_df, date_col, business_df, col_lst=KEEP_COLS):
     total_df.drop(columns='block', inplace=True)
     return total_df
 
-
-
-DATE_LST =['earliest_issue', 'latest_expiry']
-INT_LST = ['block']
-def clean_types(dataframe, date_cols=DATE_LST, int_cols=INT_LST):
-    '''
-    Used to clean the business data when imported from csv
-    '''
-    dataframe.dropna(inplace=True)
-    for d_col in date_cols:
-        dataframe[d_col] = pd.to_datetime(dataframe[d_col], infer_datetime_format=True, errors='coerce')
-    for i_col in int_cols:
-        pass
-        #dataframe[i_col] = dataframe[i_col].astype(int)
-    return dataframe
 
 
 
