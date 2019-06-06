@@ -136,26 +136,81 @@ bdict = {
         }
 
 
-def get_special_blocks(boundary_dict=bdict):
-    acs = pr.process_census()
-    acs = acs[acs['total_pop'] > 100]
+def get_special_index(x_test, boundary_dict=bdict):
     results = {}
     for col, percentile in boundary_dict.items():
-        print(col, percentile, acs[col].quantile(percentile))
+        print(col, percentile, x_test[col].quantile(percentile))
         if percentile > 0.5:
-            results[col] = acs[acs[col] >= acs[col].quantile(percentile)]['block_group']
+            results[col] = x_test[x_test[col] >= x_test[col].quantile(percentile)].index
         else:
-            results[col] = acs[acs[col] <= acs[col].quantile(percentile)]['block_group']
+            results[col] = x_test[x_test[col] <= x_test[col].quantile(percentile)].index
+    results['full'] = None
     return results
 
-def eval_model_on_special(model):
-    results = get_special_blocks():
-    for metric, blocks in results.items():
-        #filter test set to be only for blocks in blocks
-        #call eval method for model
-        #store results
-        pass
+def combining_function2(features_lst, model_lst, threshold_lst, target_att, train_df, test_df):
+    '''
+    Creates models, evaluates models and writes evaluation of models to csv.
+    Input:
+        date_lst: a list of dates on which to split training and testing data
+        model_lst: list of classifier models to run
+        dataframe: a pandas dataframe
+        col: target column for prediction
+        dummy_lst: list of column names to be converted to dummy variables
+        discretize_lst: list of column names to be discretized
+        threshold_lst: list of threshold values
+        target_att: outcome variable to be prediced (a column name)
+        drop_lst: list of column names to not be considered features
+    Outputs: a pandas dataframe with the results of our models
+    '''
+    results_df = pd.DataFrame(columns=RESULTS_COLS)
+    train_start = train_df['earliest_issue'].min()
+    train_end = train_df['earliest_issue'].max()
+    test_start = test_df['earliest_issue'].min()
+    test_end = test_df['earliest_issue'].max()
+    _, test_df = discretize_dates(test_df, features_lst)
+    x_train = train_df[features_lst]
+    y_train = train_df[target_att]
+    x_test = test_df[features_lst]
+    y_test = test_df[target_att]
+    # Loop through models and differing parameters
+    # while fitting each model with split data
+    for model in model_lst:
+        print('Running model ' + model + ' for test start date ' + str(test_start))
+        clf = CLFS[model]
+        params_to_run = PARAMS_DICT[model]
+        # Loop through varying paramets for each model
+        for param in ParameterGrid(params_to_run):
+            row_lst = [model, param, train_start, train_end, test_start,
+                       test_end, np.mean(y_test)]
+            clf.set_params(**param)
+            clf.fit(x_train, y_train)
+            subset_indexes = get_special_index(x_test)
+            for key, indx in subset_indexes:
+            	if key == 'full':
+            		sub_x_t = x_test
+            		sub_y_t = y_test
+            	else:
+            		sub_x_t = x_test[indx]
+            		sub_y_t = y_test[indx]
 
+	            predicted_scores = clf.predict_proba(sub_x_t)[:, 1]
+	            total_lst = []
+	            # Loop through thresholds,
+	            # and generating evaluation metrics for each model
+	            for population_type in filter_method:
+		            for threshold in threshold_lst:
+		                y_scores_sorted, y_true_sorted = joint_sort_descending(
+		                    np.array(predicted_scores), np.array(sub_y_t))
+		                preds_at_k = generate_binary_at_k(y_scores_sorted,
+		                                                  threshold)
+		                acc = accuracy(y_true_sorted, preds_at_k)
+		                prec = precision_score(y_true_sorted, preds_at_k)
+		                recall = recall_score(y_true_sorted, preds_at_k)
+		                f_one = f1_score(y_true_sorted, preds_at_k)
+		                auc_roc = roc_auc_score(y_true_sorted, preds_at_k)
+		                total_lst += [acc, prec, recall, f_one, auc_roc]
+		            results_df.loc[len(results_df)] = population_type + row_lst + total_lst
+    return results_df
 
 
 
@@ -197,27 +252,23 @@ def combining_function(features_lst, model_lst, threshold_lst, target_att, train
             clf.set_params(**param)
             clf.fit(x_train, y_train)
             predicted_scores = clf.predict_proba(x_test)[:, 1]
-            results = get_special_blocks()
-            #for metric, block_lst in results.items():
-            #    sub_x = x_test[x_test['block_group'].isin(block)]
-            #    sub
 
             total_lst = []
             # Loop through thresholds,
             # and generating evaluation metrics for each model
-            
-            for threshold in threshold_lst:
-                y_scores_sorted, y_true_sorted = joint_sort_descending(
-                    np.array(predicted_scores), np.array(y_test))
-                preds_at_k = generate_binary_at_k(y_scores_sorted,
-                                                  threshold)
-                acc = accuracy(y_true_sorted, preds_at_k)
-                prec = precision_score(y_true_sorted, preds_at_k)
-                recall = recall_score(y_true_sorted, preds_at_k)
-                f_one = f1_score(y_true_sorted, preds_at_k)
-                auc_roc = roc_auc_score(y_true_sorted, preds_at_k)
-                total_lst += [acc, prec, recall, f_one, auc_roc]
-            results_df.loc[len(results_df)] = row_lst + total_lst
+            for population_type in filter_method:
+	            for threshold in threshold_lst:
+	                y_scores_sorted, y_true_sorted = joint_sort_descending(
+	                    np.array(predicted_scores), np.array(y_test))
+	                preds_at_k = generate_binary_at_k(y_scores_sorted,
+	                                                  threshold)
+	                acc = accuracy(y_true_sorted, preds_at_k)
+	                prec = precision_score(y_true_sorted, preds_at_k)
+	                recall = recall_score(y_true_sorted, preds_at_k)
+	                f_one = f1_score(y_true_sorted, preds_at_k)
+	                auc_roc = roc_auc_score(y_true_sorted, preds_at_k)
+	                total_lst += [acc, prec, recall, f_one, auc_roc]
+	            results_df.loc[len(results_df)] = row_lst + total_lst
     return results_df
 
 
