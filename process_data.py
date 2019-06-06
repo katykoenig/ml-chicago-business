@@ -78,6 +78,8 @@ def process_census(acs_csv='acs_13.csv'):
         new_col = 'pct_' + col
         df[new_col] = df[col] / df['race_respondents'] * 100
         desired_cols.append(new_col)
+    df['total_pop'] = df[denoms['total_male']] + df[denoms['total_female']]
+    desired_cols.append('total_pop')
     df['block_group'] = df['block_group'].astype(str)
     return df[desired_cols]
 

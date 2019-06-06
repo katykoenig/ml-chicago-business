@@ -20,6 +20,8 @@ from dateutil.relativedelta import relativedelta
 from sklearn.externals.six import StringIO
 import pydotplus
 from IPython.display import Image
+import process_data as pr
+
 
 
 def discretize_dates(dataframe, features_lst):
@@ -125,6 +127,38 @@ RESULTS_COLS = ['model', 'parameters', 'train_start', 'train_end', 'test_start',
                 'f1_score_at_50', 'auc_roc_at_50']
 
 
+bdict = {
+    'pct_high_travel_time': 0.95,
+    'pct_below_pov': 0.95,
+    'pct_race_black': 0.95,
+    'pct_high_inc': 0.95,
+    'pct_race_white': 0.10
+        }
+
+
+def get_special_blocks(boundary_dict=bdict):
+    acs = pr.process_census()
+    acs = acs[acs['total_pop'] > 100]
+    results = {}
+    for col, percentile in boundary_dict.items():
+        print(col, percentile, acs[col].quantile(percentile))
+        if percentile > 0.5:
+            results[col] = acs[acs[col] >= acs[col].quantile(percentile)]['block_group']
+        else:
+            results[col] = acs[acs[col] <= acs[col].quantile(percentile)]['block_group']
+    return results
+
+def eval_model_on_special(model):
+    results = get_special_blocks():
+    for metric, blocks in results.items():
+        #filter test set to be only for blocks in blocks
+        #call eval method for model
+        #store results
+        pass
+
+
+
+
 def combining_function(features_lst, model_lst, threshold_lst, target_att, train_df, test_df):
     '''
     Creates models, evaluates models and writes evaluation of models to csv.
@@ -163,9 +197,15 @@ def combining_function(features_lst, model_lst, threshold_lst, target_att, train
             clf.set_params(**param)
             clf.fit(x_train, y_train)
             predicted_scores = clf.predict_proba(x_test)[:, 1]
+            results = get_special_blocks()
+            #for metric, block_lst in results.items():
+            #    sub_x = x_test[x_test['block_group'].isin(block)]
+            #    sub
+
             total_lst = []
             # Loop through thresholds,
             # and generating evaluation metrics for each model
+            
             for threshold in threshold_lst:
                 y_scores_sorted, y_true_sorted = joint_sort_descending(
                     np.array(predicted_scores), np.array(y_test))

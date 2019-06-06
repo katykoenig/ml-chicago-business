@@ -2,7 +2,7 @@ import process_data as pr
 import pandas as pd
 import numpy as np
 import pipeline as pl
-import descriptive_stats as ds
+#import descriptive_stats as ds
 from dateutil.relativedelta import relativedelta
 
 DATA_LST = [('data/train_2010-01-01_2012-06-01.csv', 'data/valid_2014-05-31_2014-06-01.csv'),
@@ -36,3 +36,6 @@ def go(model=None):
         eval_lst = ['accuracy_at_5', 'precision_at_5', 'recall_at_5', 'f1_score_at_5', 'auc_roc_at_5']
         # pl.results_eval(dataframe, results_df, 'date_posted', date_lst, to_dummy,
         #             to_discretize, 'funded_by_deadline', to_drop, eval_lst)
+
+
+
