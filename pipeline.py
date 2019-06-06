@@ -258,7 +258,7 @@ def combining_function(features_lst, model_lst, threshold_lst, target_att, train
         print('Running model ' + model + ' for test start date ' + str(test_start))
         clf = CLFS[model]
         params_to_run = PARAMS_DICT[model]
-        # Loop through varying paramets for each model
+        # Loop through varying parameterss for each model
         for param in ParameterGrid(params_to_run):
             row_lst = [model, param, train_start, train_end, test_start,
                        test_end, np.mean(y_test)]
