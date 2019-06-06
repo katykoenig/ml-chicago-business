@@ -294,7 +294,7 @@ class Plumbum:
         self._optimizing_metrics = metrics
 
 
-    def classify(self, methods=None, o_thold=5):
+    def classify(self, methods=None, o_thold=5, save_sets=False):
 
         '''
         Classify the data on the target variable in two major operations:
@@ -304,6 +304,7 @@ class Plumbum:
 
         methods (list): representation of methods by which to model.
         o_thold (int): threshold at which to identify optimal models.
+        save_sets (bool): whether the save the temporal sets as CSV files.
 
         Return the best models (set of sklearn classifier objects).
 
@@ -317,12 +318,16 @@ class Plumbum:
         for t_index, temporal_split in enumerate(self._temporal_splits):
             # Request and generate features on the training data.
             train_set, train_set_feature_map = self._generate_features(
-                data=self._db_request(*temporal_split, train=True)
+                data=self._db_request(
+                    *temporal_split, train=True, save_set=save_sets
+                )
             )
             # Request and generate features on the validation data per the
             # approach learned on the training data.
             valid_set, _ = self._generate_features(
-                data=self._db_request(*temporal_split, train=False),
+                data=self._db_request(
+                    *temporal_split, train=False, save_set=save_sets
+                ),
                 feature_map=train_set_feature_map
             )
             # Split data and validate methods for either supervised or
@@ -340,7 +345,8 @@ class Plumbum:
         # return self._unpack_best_models()
 
 
-    def _db_request(self, tl_bound, tu_bound, vl_bound, vu_bound, train):
+    def _db_request(self, tl_bound, tu_bound, vl_bound, vu_bound, train, \
+        save_set=True):
 
         '''
         Deploy temporal select statement to request data from the database.
@@ -350,6 +356,7 @@ class Plumbum:
         vl_bound (Timestamp): temporal lower bound inclusive for validation set.
         vu_bound (Timestamp): temporal upper bound exclusive for validation set.
         train (bool): whether to request a training or validation set.
+        save_sets (bool): whether to save the temporal set as CSV files.
 
         Return data (DataFrame).
 
@@ -371,7 +378,7 @@ class Plumbum:
         # Open connection.
         self._db_open()
         # Request and collect storefronts in this period.
-        select_storefronts = f'''
+        select_storefronts = '''
         WITH 
             storefronts_general AS ( 
                 SELECT 
@@ -379,16 +386,16 @@ class Plumbum:
                     MIN(issue_date) AS earliest_issue, 
                     MAX(expiry_date) AS latest_issue 
                 FROM licenses 
-                WHERE DATETIME(expiry_date) >= DATETIME('{l_bound}') 
-                AND DATETIME(issue_date) < DATETIME('{u_bound}') 
+                WHERE DATETIME(expiry_date) >= DATETIME('{}') 
+                AND DATETIME(issue_date) < DATETIME('{}') 
                 GROUP BY account_number, site_number 
             ), 
             storefronts_general_future AS (
                 SELECT 
                     account_number || '-' || site_number AS sf_id 
                 FROM licenses 
-                WHERE DATETIME(expiry_date) >= DATETIME('{l_bound + interval}') 
-                AND DATETIME(issue_date) < DATETIME('{u_bound + interval}') 
+                WHERE DATETIME(expiry_date) >= DATETIME('{}') 
+                AND DATETIME(issue_date) < DATETIME('{}') 
                 GROUP BY account_number, site_number 
             ), 
             storefronts_success AS ( 
@@ -413,8 +420,8 @@ class Plumbum:
                     ) AS last_location 
                 FROM licenses 
                 WHERE block IS NOT NULL 
-                AND DATETIME(expiry_date) >= DATETIME('{l_bound}') 
-                AND DATETIME(issue_date) < DATETIME('{u_bound}') 
+                AND DATETIME(expiry_date) >= DATETIME('{}') 
+                AND DATETIME(issue_date) < DATETIME('{}') 
             ), 
             storefronts_blocks AS ( 
                 SELECT 
@@ -424,8 +431,8 @@ class Plumbum:
                     block 
                 FROM licenses 
                 WHERE block IS NOT NULL 
-                AND DATETIME(expiry_date) >= DATETIME('{l_bound}') 
-                AND DATETIME(issue_date) < DATETIME('{u_bound}') 
+                AND DATETIME(expiry_date) >= DATETIME('{}') 
+                AND DATETIME(issue_date) < DATETIME('{}') 
                 GROUP BY block 
             )
         SELECT DISTINCT 
@@ -440,44 +447,52 @@ class Plumbum:
         JOIN storefronts_blocks USING (block) 
         WHERE last_location = 1;
         '''
+        select_storefronts = \
+            select_storefronts.format(l_bound, u_bound, l_bound + interval, \
+                u_bound + interval, l_bound, u_bound, l_bound, u_bound)
         storefronts = pd.read_sql(select_storefronts, self._db_con)
         # Request and collect licenses extant in training period by storefront.
-        select_storefronts_licenses = f'''
+        select_storefronts_licenses = '''
         SELECT * 
         FROM ( 
             SELECT account_number || '-' || site_number AS sf_id 
             FROM licenses 
-            WHERE DATETIME(expiry_date) >= DATETIME('{l_bound}') 
-            AND DATETIME(issue_date) < DATETIME('{u_bound}') 
+            WHERE DATETIME(expiry_date) >= DATETIME('{}') 
+            AND DATETIME(issue_date) < DATETIME('{}') 
             GROUP BY account_number, site_number 
         ) AS storefronts 
         '''
-        select_extant_licenses = self._db_cur.execute(f'''
+        select_storefronts_licenses = \
+            select_storefronts_licenses.format(l_bound, u_bound)
+        select_extant_licenses = '''
             SELECT DISTINCT license_code 
             FROM licenses 
-            WHERE DATETIME(expiry_date) >= DATETIME('{tl_bound}') 
-            AND DATETIME(issue_date) < DATETIME('{tu_bound}') 
+            WHERE DATETIME(expiry_date) >= DATETIME('{}') 
+            AND DATETIME(issue_date) < DATETIME('{}') 
             '''
-        ) 
-        extant_licenses = select_extant_licenses.fetchall()
+        select_extant_licenses = \
+            select_extant_licenses.format(tl_bound, tu_bound)
+        self._db_cur.execute(select_extant_licenses)
+        extant_licenses = self._db_cur.fetchall()
         # Request licenses individually and join relations in batches.
         licenses_join_complete = []
         licenses_join_queue = []
         for i, extant_license in enumerate(extant_licenses):
             license_lable = "_".join(extant_license[0].lower().split())
-            licenses_join_queue.append(f'''
+            left_join = '''
                 LEFT JOIN (
                     SELECT 
                         account_number || '-' || site_number AS sf_id, 
-                        COUNT(license_code) AS license_{license_lable} 
+                        COUNT(license_code) AS license_{} 
                     FROM licenses 
-                    WHERE license_code = '{extant_license[0]}' 
-                    AND DATETIME(expiry_date) >= DATETIME('{l_bound}') 
-                    AND DATETIME(issue_date) < DATETIME('{u_bound}') 
+                    WHERE license_code = '{}' 
+                    AND DATETIME(expiry_date) >= DATETIME('{}') 
+                    AND DATETIME(issue_date) < DATETIME('{}') 
                     GROUP BY account_number, site_number 
-                ) AS L_{license_lable} USING (sf_id) 
+                ) AS L_{} USING (sf_id) 
                 '''
-            ) 
+            licenses_join_queue.append(left_join.format(license_lable, \
+                extant_license[0], l_bound, u_bound, license_lable))
             # Execute these joins at the join limit or with the last relation.
             if i % JOIN_LIMIT == 0 or i == len(extant_licenses) - 1:
                 batch = pd.read_sql(
@@ -491,29 +506,29 @@ class Plumbum:
         for batch in licenses_join_complete:
             licenses = licenses.merge(batch, on="sf_id")
         # Request and collect crimes extant in training period by block.
-        select_crime_general = f'''
+        select_crime_general = '''
         WITH 
             domestic AS ( 
                 SELECT block, COUNT(domestic) AS domestic_sum 
                 FROM crimes 
-                WHERE DATETIME(date) >= DATETIME('{tl_bound}') 
-                AND DATETIME(date) < DATETIME('{tu_bound}') 
+                WHERE DATETIME(date) >= DATETIME('{}') 
+                AND DATETIME(date) < DATETIME('{}') 
                 AND domestic = 'True' 
                 GROUP BY block 
             ), 
             arrest AS ( 
                 SELECT block, COUNT(arrest) AS arrest_sum 
                 FROM crimes 
-                WHERE DATETIME(date) >= DATETIME('{tl_bound}') 
-                AND DATETIME(date) < DATETIME('{tu_bound}') 
+                WHERE DATETIME(date) >= DATETIME('{}') 
+                AND DATETIME(date) < DATETIME('{}') 
                 AND arrest = 'True' 
                 GROUP BY block 
             ),
             sum AS (
                 SELECT block, COUNT(crime) AS crime_sum 
                 FROM crimes 
-                WHERE DATETIME(date) >= DATETIME('{tl_bound}') 
-                AND DATETIME(date) < DATETIME('{tu_bound}') 
+                WHERE DATETIME(date) >= DATETIME('{}') 
+                AND DATETIME(date) < DATETIME('{}') 
                 GROUP BY block 
             ) 
         SELECT DISTINCT block 
@@ -522,22 +537,27 @@ class Plumbum:
         LEFT JOIN arrest USING (block) 
         LEFT JOIN sum USING (block);
         '''
+        select_crime_general = \
+            select_crime_general.format(tl_bound, tu_bound, tl_bound, \
+                tu_bound, tl_bound, tu_bound)
         crime_general = pd.read_sql(select_crime_general, self._db_con)
-        select_crimes_blocks = f'''
+        select_crimes_blocks = '''
         SELECT * 
         FROM (
             SELECT DISTINCT block 
             FROM blocks
         ) AS blocks 
         '''
-        select_extant_crimes = self._db_cur.execute(f'''
+        select_extant_crimes = '''
             SELECT DISTINCT crime 
             FROM crimes 
-            WHERE DATETIME(date) >= DATETIME('{tl_bound}') 
-            AND DATETIME(date) < DATETIME('{tu_bound}');
+            WHERE DATETIME(date) >= DATETIME('{}') 
+            AND DATETIME(date) < DATETIME('{}');
             '''
-        )
-        extant_crimes = select_extant_crimes.fetchall()
+        select_extant_crimes = \
+            select_extant_crimes.format(tl_bound, tu_bound)
+        self._db_cur.execute(select_extant_crimes)
+        extant_crimes = self._db_cur.fetchall()
         # Request crimes individually and join relations in batches.
         crimes_join_complete = [crime_general]
         crimes_join_queue = []
@@ -547,18 +567,19 @@ class Plumbum:
                 .replace("(", "").replace(")", "").replace("-", "") \
                 .split()
             )
-            crimes_join_queue.append(f'''
+            left_join = '''
                 LEFT JOIN (
                     SELECT block, 
-                    COUNT(crime) AS crime_{crime_label} 
+                    COUNT(crime) AS crime_{} 
                 FROM crimes 
-                WHERE crime = '{extant_crime[0]}' 
-                AND DATETIME(date) >= DATETIME('{l_bound}') 
-                AND DATETIME(date) < DATETIME('{u_bound}') 
+                WHERE crime = '{}' 
+                AND DATETIME(date) >= DATETIME('{}') 
+                AND DATETIME(date) < DATETIME('{}') 
                 GROUP BY block 
-                ) AS C_{crime_label} USING (block) 
+                ) AS C_{} USING (block) 
                 '''
-            )
+            crimes_join_queue.append(left_join.format(crime_label, \
+                extant_crime[0], l_bound, u_bound, crime_label))
             # Execute these joins at the join limit or with the last relation.
             if i % JOIN_LIMIT == 0 or i == len(extant_crimes) - 1:
                 batch = pd.read_sql(
@@ -588,7 +609,8 @@ class Plumbum:
             [set_type, str(l_bound.date()), str(u_bound.date())]
         )
         # Save the dataframe to CSV and return the dataframe for modeling.
-        data.to_csv(filename + ".csv", index=False)
+        if save_set:
+            data.to_csv(filename + ".csv", index=False)
         return data
 
 
