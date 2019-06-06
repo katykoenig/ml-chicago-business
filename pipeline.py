@@ -126,6 +126,21 @@ RESULTS_COLS = ['model', 'parameters', 'train_start', 'train_end', 'test_start',
                 'accuracy_at_50', 'precision_at_50', 'recall_at_50',
                 'f1_score_at_50', 'auc_roc_at_50']
 
+RESULTS_COLS2 = ['test_set', 'model', 'parameters', 'train_start', 'train_end', 'test_start',
+                'test_end', 'test_baseline', 'accuracy_at_1', 'precision_at_1',
+                'recall_at_1', 'f1_score_at_1', 'auc_roc_at_1', 'accuracy_at_2',
+                'precision_at_2', 'recall_at_2', 'f1_score_at_2',
+                'auc_roc_at_2', 'accuracy_at_5', 'precision_at_5',
+                'recall_at_5', 'f1_score_at_5', 'auc_roc_at_5',
+                'accuracy_at_10', 'precision_at_10', 'recall_at_10',
+                'f1_score_at_10', 'auc_roc_at_10', 'accuracy_at_20',
+                'precision_at_20', 'recall_at_20', 'f1_score_at_20',
+                'auc_roc_at_20', 'accuracy_at_30', 'precision_at_30',
+                'recall_at_1', 'f1_score_at_30', 'auc_roc_at_30',
+                'accuracy_at_50', 'precision_at_50', 'recall_at_50',
+                'f1_score_at_50', 'auc_roc_at_50']
+
+
 
 bdict = {
     'pct_high_travel_time': 0.95,
@@ -139,7 +154,6 @@ bdict = {
 def get_special_index(x_test, boundary_dict=bdict):
     results = {}
     for col, percentile in boundary_dict.items():
-        print(col, percentile, x_test[col].quantile(percentile))
         if percentile > 0.5:
             results[col] = x_test[x_test[col] >= x_test[col].quantile(percentile)].index
         else:
@@ -176,6 +190,7 @@ def combining_function2(features_lst, model_lst, threshold_lst, target_att, trai
     # while fitting each model with split data
     for model in model_lst:
         print('Running model ' + model + ' for test start date ' + str(test_start))
+        print(model)
         clf = CLFS[model]
         params_to_run = PARAMS_DICT[model]
         # Loop through varying paramets for each model
@@ -185,31 +200,29 @@ def combining_function2(features_lst, model_lst, threshold_lst, target_att, trai
             clf.set_params(**param)
             clf.fit(x_train, y_train)
             subset_indexes = get_special_index(x_test)
-            for key, indx in subset_indexes:
-            	if key == 'full':
-            		sub_x_t = x_test
-            		sub_y_t = y_test
-            	else:
-            		sub_x_t = x_test[indx]
-            		sub_y_t = y_test[indx]
-
-	            predicted_scores = clf.predict_proba(sub_x_t)[:, 1]
-	            total_lst = []
-	            # Loop through thresholds,
-	            # and generating evaluation metrics for each model
-	            for population_type in filter_method:
-		            for threshold in threshold_lst:
-		                y_scores_sorted, y_true_sorted = joint_sort_descending(
-		                    np.array(predicted_scores), np.array(sub_y_t))
-		                preds_at_k = generate_binary_at_k(y_scores_sorted,
-		                                                  threshold)
-		                acc = accuracy(y_true_sorted, preds_at_k)
-		                prec = precision_score(y_true_sorted, preds_at_k)
-		                recall = recall_score(y_true_sorted, preds_at_k)
-		                f_one = f1_score(y_true_sorted, preds_at_k)
-		                auc_roc = roc_auc_score(y_true_sorted, preds_at_k)
-		                total_lst += [acc, prec, recall, f_one, auc_roc]
-		            results_df.loc[len(results_df)] = population_type + row_lst + total_lst
+            for key, indx in subset_indexes.items():
+                if key == 'full':
+                    sub_x_t = x_test
+                    sub_y_t = y_test
+                else:
+                    sub_x_t = x_test.iloc[indx]
+                    sub_y_t = y_test.iloc[indx]
+                predicted_scores = clf.predict_proba(sub_x_t)[:, 1]
+                total_lst = []
+                # Loop through thresholds,
+                # and generating evaluation metrics for each model
+                for threshold in threshold_lst:
+                    y_scores_sorted, y_true_sorted = joint_sort_descending(
+                        np.array(predicted_scores), np.array(sub_y_t))
+                    preds_at_k = generate_binary_at_k(y_scores_sorted,
+                                                      threshold)
+                    acc = accuracy(y_true_sorted, preds_at_k)
+                    prec = precision_score(y_true_sorted, preds_at_k)
+                    recall = recall_score(y_true_sorted, preds_at_k)
+                    f_one = f1_score(y_true_sorted, preds_at_k)
+                    auc_roc = roc_auc_score(y_true_sorted, preds_at_k)
+                    total_lst += [acc, prec, recall, f_one, auc_roc]
+                results_df.loc[len(results_df)] = [key] + row_lst + total_lst
     return results_df
 
 
@@ -257,18 +270,18 @@ def combining_function(features_lst, model_lst, threshold_lst, target_att, train
             # Loop through thresholds,
             # and generating evaluation metrics for each model
             for population_type in filter_method:
-	            for threshold in threshold_lst:
-	                y_scores_sorted, y_true_sorted = joint_sort_descending(
-	                    np.array(predicted_scores), np.array(y_test))
-	                preds_at_k = generate_binary_at_k(y_scores_sorted,
-	                                                  threshold)
-	                acc = accuracy(y_true_sorted, preds_at_k)
-	                prec = precision_score(y_true_sorted, preds_at_k)
-	                recall = recall_score(y_true_sorted, preds_at_k)
-	                f_one = f1_score(y_true_sorted, preds_at_k)
-	                auc_roc = roc_auc_score(y_true_sorted, preds_at_k)
-	                total_lst += [acc, prec, recall, f_one, auc_roc]
-	            results_df.loc[len(results_df)] = row_lst + total_lst
+                for threshold in threshold_lst:
+                    y_scores_sorted, y_true_sorted = joint_sort_descending(
+                        np.array(predicted_scores), np.array(y_test))
+                    preds_at_k = generate_binary_at_k(y_scores_sorted,
+                                                      threshold)
+                    acc = accuracy(y_true_sorted, preds_at_k)
+                    prec = precision_score(y_true_sorted, preds_at_k)
+                    recall = recall_score(y_true_sorted, preds_at_k)
+                    f_one = f1_score(y_true_sorted, preds_at_k)
+                    auc_roc = roc_auc_score(y_true_sorted, preds_at_k)
+                    total_lst += [acc, prec, recall, f_one, auc_roc]
+                results_df.loc[len(results_df)] = row_lst + total_lst
     return results_df
 
 
