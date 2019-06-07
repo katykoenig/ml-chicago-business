@@ -31,7 +31,7 @@ def run_entrepreneurship_pipeline(arguments):
     ce.temporal_splits = [(tl_bound, tu_bound, vl_bound, vu_bound)]
     # Model on this temporal split otherwise.
     if not arguments.skip_model:
-        ce.classify()
+        ce.classify(save_sets=True)
     # Just create the datasets for the temporal split otherwise.
     else:
         ce._db_request(tl_bound, tu_bound, vl_bound, vu_bound, True)

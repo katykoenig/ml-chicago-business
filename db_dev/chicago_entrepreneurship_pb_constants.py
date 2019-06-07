@@ -160,12 +160,57 @@ _DEFAULT_EVALUATION_COLUMNS = ["method", "t_index", "train_l_bound",
     "p_index", "parameters", "computation_time", "auc", "threshold",
     "accuracy", "precision", "recall", "f1"]
 select_methods = {
+    "adaboost": (
+        AdaBoostClassifier(),
+        {
+            "algorithm": ["SAMME", "SAMME.R"],
+            "base_estimator": _BASE_ESTIMATOR,
+            "n_estimators": _N_ESTIMATORS,
+            "random_state": _RANDOM_STATE
+        }
+    ),
+    "bagging": (
+        BaggingClassifier(),
+        {
+            "base_estimator": _BASE_ESTIMATOR,
+            "n_estimators": _N_ESTIMATORS,
+            "n_jobs": _N_JOBS,
+            "random_state": _RANDOM_STATE
+        }
+    ),
+    "bayes": (
+        GaussianNB(),
+        {}
+    ),
+    "logistic": (
+        LogisticRegression(),
+        {        
+            "C": _C_PENALTY,
+            "max_iter": [1000],
+            "multi_class": ["multinomial"],
+            "penalty": ["l2"],
+            "random_state": _RANDOM_STATE,
+            "solver": ["lbfgs"]
+        }
+    ),
+    "random_forest": (
+        RandomForestClassifier(),
+        {
+            "criterion": ["entropy"],
+            "max_depth": [5, 10, 50],
+            "max_features": _MAX_FEATURES,
+            "min_samples_split": _MIN_SAMPLES_SPLIT,
+            "n_estimators": _N_ESTIMATORS,
+            "n_jobs": _N_JOBS,
+            "random_state": _RANDOM_STATE
+        }
+    ),
     "tree": (
         DecisionTreeClassifier(),
         {
             "criterion": ["entropy"],
-            "max_depth": [10],
-            "min_samples_split": [2],
+            "max_depth": [5, 10, 50],
+            "min_samples_split": _MIN_SAMPLES_SPLIT,
             "random_state": _RANDOM_STATE
         }
     )
