@@ -3,5 +3,4 @@
 data/
 data/*
 *.sqlite3
-*.csv
 __pycache__/
