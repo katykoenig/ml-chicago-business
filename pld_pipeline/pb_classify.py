@@ -28,7 +28,6 @@ from sklearn.model_selection import train_test_split, ParameterGrid
 import sqlite3
 import pb_constants as pbk
 import pb_plotting as pbp
-from db_query import temporal_select
 
 
 class Plumbum:
@@ -41,7 +40,6 @@ class Plumbum:
         or builds that database from the CSV file at the given path.
 
         name (str): representation of Plumbum object and database name.
-        path_to_csv (str): location at which to find CSV file of the data.
 
         Return Plumbum object (Plumbum).
 
@@ -49,12 +47,13 @@ class Plumbum:
 
         self._reset_modeling_defaults()
         self._db_name = "_".join(name.lower().split())
-        path_convention = os.path.dirname(__file__) + "/" + self._db_name
-        self._db_path =  path_convention + "_db.sqlite3"
-        self._ev_path = path_convention + "_models.csv"
+        wd = os.path.join(os.path.dirname(__file__), os.pardir)
+        self._db_path = wd + "/" + self._db_name + "_db.sqlite3"
+        self._ev_path = wd + "/" + self._db_name + "_models.csv"
         self._target_variable = None
         self._temporal_splits = []
-        self._temporal_interval = np.timedelta64(2, "Y")
+        self._temporal_buffer = np.timedelta64(2, "Y")
+        self._temporal_select = lambda x: None
         self._best_models = {}
     
 
@@ -66,7 +65,6 @@ class Plumbum:
         '''
 
         self._db_con = sqlite3.connect(self._db_path)
-        self._db_cur = self._db_con.cursor()
 
     
     def _db_close(self):
@@ -146,30 +144,65 @@ class Plumbum:
 
 
     @property
-    def temporal_interval(self):
+    def temporal_buffer(self):
 
         '''
-        Verify the temporal interval on which to control temporal modeling.
+        Verify the temporal buffer from model prediction to outcome observation
+        with which to control temporal modeling.
 
-        Return temporal interval (np.timedelta64).
-
-        '''
-
-        return self._temporal_interval
-
-
-    @temporal_interval.setter
-    def temporal_interval(self, temporal_interval):
-
-        '''
-        Set the temporal interval.
-
-        temporal_interval (np.timedelta64): period between prediction date and
-        outome date.
+        Return temporal buffer (np.timedelta64).
 
         '''
 
-        self._temporal_interval = temporal_interval
+        return self._temporal_buffer
+
+
+    @temporal_buffer.setter
+    def temporal_buffer(self, temporal_buffer):
+
+        '''
+        Set the temporal buffer.
+
+        temporal_buffer (np.timedelta64): time between prediction and outome.
+
+        '''
+
+        self._temporal_buffer = temporal_buffer
+        
+        
+    @property
+    def temporal_select(self):
+
+        '''
+        Verify the temporal select function with which to query the database for
+        a temporal set.
+
+        Return temporal select function (function).
+
+        '''
+
+        return self._temporal_buffer
+
+
+    @temporal_select.setter
+    def temporal_select(self, temporal_select):
+
+        '''
+        Set the temporal select function.
+        
+        temporal_select (function): this must accept these positional arguments:
+        1. db_con (Connection): database driver.
+        2. train_lb (datetime): training set temporal lower bound inclusive.
+        3. train_ub (datetime): training set temporal upper bound exclusive.
+        4. valid_lb (datetime): validation set temporal lower bound inclusive.
+        5. valid_ub (datetime): validation set temporal upper bound exclusive.
+        6. buffer (timedelta): time between prediction and observation.
+        7. train (bool): whether to request a training or validation set.
+        8. export_csv (bool): whether to save the temporal set as a CSV file.
+
+        '''
+
+        self._temporal_select = temporal_select
         
         
     @property
@@ -317,34 +350,32 @@ class Plumbum:
         # implementation does not support out-of-sample validation.
         for t_index, temporal_split in enumerate(self._temporal_splits):
             # Request and generate features on the training data.
-            train_set, train_set_feature_map = self._generate_features(
-                data=self._db_request(*temporal_split, train=True)
+            self._db_open()
+            train_set = self._temporal_select(
+                self._db_con, *temporal_split, self._temporal_buffer, 
+                train=True
             )
+            train_set, feature_map = self._generate_features(train_set)
+            self._db_close()
             # Request and generate features on the validation data per the
             # approach learned on the training data.
-            valid_set, _ = self._generate_features(
-                data=self._db_request(*temporal_split, train=False),
-                feature_map=train_set_feature_map
+            self._db_open()
+            valid_set = self._temporal_select(
+                self._db_con, *temporal_split, self._temporal_buffer, 
+                train=False
             )
+            valid_set, _ = self._generate_features(valid_set, feature_map)
+            self._db_close()
             # Split data and validate methods for either supervised or
             # unsupervised learning.
             X_train, y_train, X_valid, y_valid, methods = \
-                self._prepare_learning_curriculum(
-                    train_set, valid_set, methods
-                )
+                self._prepare_learning_curriculum(train_set, valid_set, methods)
             # Generate models per this machine learning curriculum.
             self._generate_models(
-                X_train, y_train, X_valid, y_valid, methods, t_index,
-                o_thold
+                X_train, y_train, X_valid, y_valid, methods, t_index, o_thold
             )
         # Plot curves of the best models and return their classifiers.
         return self._unpack_best_models()
-
-
-    def _db_request(self, tl_bound, tu_bound, vl_bound, vu_bound, train):
-
-        return temporal_select(tl_bound, tu_bound, vl_bound, vu_bound, \
-            self._temporal_interval, train)
 
 
     def _generate_features(self, data, feature_map={}):

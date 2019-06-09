@@ -215,3 +215,14 @@ select_methods = {
         }
     )
 }
+short_methods = {
+    "tree": (
+        DecisionTreeClassifier(),
+        {
+            "criterion": ["entropy"],
+            "max_depth": [10],
+            "min_samples_split": [2],
+            "random_state": [0]
+        }
+    )
+}

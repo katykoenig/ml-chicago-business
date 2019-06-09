@@ -1,4 +1,4 @@
-import process_data as pr
+# import process_data as pr
 import pandas as pd
 import numpy as np
 import pipeline as pl
@@ -26,8 +26,8 @@ def go(model=None):
     for pair in DATA_LST:
         train_df = pd.read_csv(pair[0])
         test_df = pd.read_csv(pair[1])
-        train_df = pr.clean_types(train_df)
-        test_df = pr.clean_types(test_df)
+        # train_df = pr.clean_types(train_df)
+        # test_df = pr.clean_types(test_df)
         features_lst, train_df = pl.generate_features(test_df, ['successful','earliest_issue', 'latest_issue','sf_id', 'block_group'])
         thresh_lst = [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5]
         results_df = pl.combining_function2(features_lst, models_to_run, thresh_lst, 'successful', train_df, test_df)

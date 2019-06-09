@@ -17,39 +17,39 @@ import pandas as pd
 import sqlite3
 
 
-# Establish connection to the database.
-CHICAGO_DB = "chicago_entrepreneurship_db.sqlite3"
-db = sqlite3.connect(CHICAGO_DB)
-
-
 def db_query(arguments):
+
+    # Establish connection to the database.
+    CHICAGO_DB = "chicago_entrepreneurship_db.sqlite3"
+    db_con = sqlite3.connect(CHICAGO_DB)
 
     # Set temporal splits.
     train_lb = np.datetime64(arguments.train_lb)
     train_ub = np.datetime64(arguments.train_ub)
     valid_lb = np.datetime64(arguments.valid_lb)
     valid_ub = np.datetime64(arguments.valid_ub)
-    interval = np.timedelta64(2, "Y")
+    buffer = np.timedelta64(2, "Y")
     # Create the datasets for this temporal split.
-    temporal_select(train_lb, train_ub, valid_lb, valid_ub, interval, True, \
-        True)
-    temporal_select(train_lb, train_ub, valid_lb, valid_ub, interval, False, \
-        True)
+    temporal_select(db_con, train_lb, train_ub, valid_lb, valid_ub, buffer, \
+        True, True)
+    temporal_select(db_con, train_lb, train_ub, valid_lb, valid_ub, buffer, \
+        False, True)
 
 
-def temporal_select(train_lb, train_ub, valid_lb, valid_ub, interval, train, \
-    export_csv=False):
+def temporal_select(db_con, train_lb, train_ub, valid_lb, valid_ub, buffer, \
+    train, export_csv=False):
 
     '''
     Compile a temporal set from the database.
 
-    train_lb (datetime): temporal lower bound inclusive for training set.
-    train_ub (datetime): temporal upper bound exclusive for training set.
-    valid_lb (datetime): temporal lower bound inclusive for validation set.
-    valid_ub (datetime): temporal upper bound exclusive for validation set.
-    interval (timedelta): length of time between prediction and observation.
+    db_con (Connection): database driver.
+    train_lb (datetime): training set temporal lower bound inclusive.
+    train_ub (datetime): training set temporal upper bound exclusive.
+    valid_lb (datetime): validation set temporal lower bound inclusive.
+    valid_ub (datetime): validation set temporal upper bound exclusive.
+    buffer (timedelta): time between prediction and observation.
     train (bool): whether to request a training or validation set.
-    export_csv (bool): whether to also save the temporal set as a CSV file.
+    export_csv (bool): whether to save the temporal set as a CSV file.
 
     Return data (DataFrame).
 
@@ -57,7 +57,7 @@ def temporal_select(train_lb, train_ub, valid_lb, valid_ub, interval, train, \
 
     # Set join limit constant and initialize connection cursor.
     JOIN_LIMIT = 60
-    db_cursor = db.cursor()
+    db_cursor = db_con.cursor()
     # Convert np.datetime64 to pd.Timestamp for convenience.
     train_lb = pd.Timestamp(train_lb)
     train_ub = pd.Timestamp(train_ub)
@@ -85,8 +85,8 @@ def temporal_select(train_lb, train_ub, valid_lb, valid_ub, interval, train, \
             SELECT 
                 account_number || '-' || site_number AS sf_id 
             FROM licenses 
-            WHERE DATETIME(expiry_date) >= DATETIME('{lb + interval}') 
-            AND DATETIME(issue_date) < DATETIME('{ub + interval}') 
+            WHERE DATETIME(expiry_date) >= DATETIME('{lb + buffer}') 
+            AND DATETIME(issue_date) < DATETIME('{ub + buffer}') 
             GROUP BY account_number, site_number 
         ), 
         storefronts_success AS ( 
@@ -138,7 +138,7 @@ def temporal_select(train_lb, train_ub, valid_lb, valid_ub, interval, train, \
     JOIN storefronts_blocks USING (block) 
     WHERE last_location = 1;
     '''
-    storefronts = pd.read_sql(select_storefronts, db)
+    storefronts = pd.read_sql(select_storefronts, db_con)
     # Request and collect licenses extant in training period by storefront.
     select_storefronts_licenses = f'''
     SELECT * 
@@ -180,7 +180,7 @@ def temporal_select(train_lb, train_ub, valid_lb, valid_ub, interval, train, \
         if i % JOIN_LIMIT == 0 or i == len(extant_licenses) - 1:
             batch = pd.read_sql(
                 select_storefronts_licenses + " ".join(licenses_join_queue),
-                db
+                db_con
             )
             licenses_join_complete.append(batch.fillna(0))
             licenses_join_queue = []
@@ -220,7 +220,7 @@ def temporal_select(train_lb, train_ub, valid_lb, valid_ub, interval, train, \
     LEFT JOIN arrest USING (block) 
     LEFT JOIN sum USING (block);
     '''
-    crime_general = pd.read_sql(select_crime_general, db)
+    crime_general = pd.read_sql(select_crime_general, db_con)
     select_crimes_blocks = f'''
     SELECT * 
     FROM (
@@ -261,7 +261,7 @@ def temporal_select(train_lb, train_ub, valid_lb, valid_ub, interval, train, \
         if i % JOIN_LIMIT == 0 or i == len(extant_crimes) - 1:
             batch = pd.read_sql(
                 select_crimes_blocks + " ".join(crimes_join_queue),
-                db
+                db_con
             )
             crimes_join_complete.append(batch.fillna(0))
             crimes_join_queue = []
@@ -269,8 +269,122 @@ def temporal_select(train_lb, train_ub, valid_lb, valid_ub, interval, train, \
     crimes = crimes_join_complete.pop()
     for batch in crimes_join_complete:
         crimes = crimes.merge(batch, on="block")
-    # Request census data.
-    census = pd.read_sql("SELECT * FROM census", db)
+    # Request and aggregate census data.
+    census = pd.read_sql("SELECT * FROM census", db_con)
+    census["total_population"] = census["total_male"] + census["total_female"]
+    aggregations = {
+        "pct_male_children": ("total_male", [
+            "total_male_<5",
+            "total_male_5-9",
+            "total_male_10-14",
+            "total_male_15-17"
+        ]),
+        "pct_male_working": ("total_male", [
+            "total_male_18-19",
+            "total_male_20",
+            "total_male_21",
+            "total_male_22-24",
+            "total_male_25-29",
+            "total_male_30-34",
+            "total_male_35-39",
+            "total_male_40-44",
+            "total_male_45-49",
+            "total_male_50-54",
+            "total_male_55-59",
+            "total_male_60-61",
+            "total_male_62-64"
+        ]),
+        "pct_male_elderly": ("total_male", [
+            "total_male_65-66",
+            "total_male_67-69",
+            "total_male_70-74",
+            "total_male_75-79",
+            "total_male_80-84",
+            "total_male_>=85"
+        ]),
+        "pct_female_children": ("total_female", [
+            "total_female_<5",
+            "total_female_5-9",
+            "total_female_10-14",
+            "total_female_15-17"
+        ]),
+        "pct_female_working": ("total_female", [
+            "total_female_18-19",
+            "total_female_20",
+            "total_female_21",
+            "total_female_22-24",
+            "total_female_25-29",
+            "total_female_30-34",
+            "total_female_35-39",
+            "total_female_40-44",
+            "total_female_45-49",
+            "total_female_50-54",
+            "total_female_55-59",
+            "total_female_60-61",
+            "total_female_62-64"
+        ]),
+        "pct_female_elderly": ("total_female", [
+            "total_female_65-66",
+            "total_female_67-69",
+            "total_female_70-74",
+            "total_female_75-79",
+            "total_female_80-84",
+            "total_female_>=85"
+        ]),
+        "pct_low_travel_time": ("total_commute_time", [
+            "total_commute_<5",
+            "total_commute_5-9",
+            "total_commute_10-14",
+            "total_commute_15-19",
+            "total_commute_20-24"
+        ]),
+        "pct_medium_travel_time": ("total_commute_time", [
+            "total_commute_25-29",
+            "total_commute_30-34",
+            "total_commute_35-39",
+            "total_commute_40-44",
+            "total_commute_45-59"
+        ]),
+        "pct_high_travel_time": ("total_commute_time", [
+            "total_commute_60-89",
+            "total_commute_>=90"
+        ]),
+        "pct_below_poverty": ("hhinc_respondents", [
+            "hhinc_00_10K",
+            "hhinc_10_15K",
+            "hhinc_15_20K",
+            "hhinc_20_25K"
+        ]),
+        "pct_below_median_income": ("hhinc_respondents", [
+            "hhinc_25_30K",
+            "hhinc_30_35K",
+            "hhinc_35_40K",
+            "hhinc_40_45K",
+            "hhinc_45_50K",
+            "hhinc_50_60K"
+        ]),
+        "pct_above_median_income": ("hhinc_respondents", [
+            "hhinc_60_75K",
+            "hhinc_75_100K"
+        ]),
+        "pct_high_income": ("hhinc_respondents", [
+            "hhinc_100_125K",
+            "hhinc_125_150K",
+            "hhinc_150_200K"
+        ]),
+        "pct_white": ("race_respondents", ["race_white"]),
+        "pct_black": ("race_respondents", ["race_black"]),
+        "pct_asian": ("race_respondents", ["race_asian"]),
+        "pct_hispanic": ("race_respondents", ["race_hispanic"])
+    }
+    columns_to_drop = []
+    for aggregation, columns in aggregations.items():
+        denominator, numerators = columns
+        census[aggregation] = \
+            census[numerators].agg("sum", axis=1) / census[denominator]
+        columns_to_drop.extend(numerators)
+        columns_to_drop.append(denominator)
+    census = census.drop(columns=list(set(columns_to_drop)))
     # Join storefronts, licenses, crimes, census data.
     data = storefronts.merge(licenses, on="sf_id").merge(crimes, on="block")
     data["block_group"] = data["block"].apply(lambda x: x // 1000)
