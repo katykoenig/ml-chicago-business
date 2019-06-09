@@ -2,6 +2,6 @@
 .ipynb_checkpoints/
 *.sqlite3
 __pycache__/
-.vscode/
+.vscode
 *.csv
 
