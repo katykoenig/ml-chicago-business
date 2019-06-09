@@ -380,14 +380,16 @@ def temporal_select(db_con, train_lb, train_ub, valid_lb, valid_ub, buffer, \
     columns_to_drop = []
     for aggregation, columns in aggregations.items():
         denominator, numerators = columns
-        census[aggregation] = \
-            census[numerators].agg("sum", axis=1) / census[denominator]
+        census[aggregation] = census[numerators] \
+            .agg("sum", axis=1) \
+            .div(census[denominator]) \
+            .fillna(0)
         columns_to_drop.extend(numerators)
         columns_to_drop.append(denominator)
     census = census.drop(columns=list(set(columns_to_drop)))
     # Join storefronts, licenses, crimes, census data.
     data = storefronts.merge(licenses, on="sf_id").merge(crimes, on="block")
-    data["block_group"] = data["block"].apply(lambda x: x // 1000)
+    data["block_group"] = data["block"].floordiv(1000)
     data = data.merge(census, on="block_group")
     # Save the dataframe to CSV if requested.
     if export_csv:
