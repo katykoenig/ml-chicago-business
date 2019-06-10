@@ -20,7 +20,7 @@ from dateutil.relativedelta import relativedelta
 from sklearn.externals.six import StringIO
 import pydotplus
 from IPython.display import Image
-# import process_data as pr
+import process_data as pr
 from ast import literal_eval
 
 
@@ -255,18 +255,21 @@ def results_eval(results_df, evaluator_lst, train_df, test_df, target_att, featu
     for i in results_df['test_set'].unique():
         specified_df = results_df[results_df['test_set'] == i]
         for evaluator in evaluator_lst:
-            print("BEST MODEL FOR " + str(i) + ' with '+ evaluator)
+            #print("BEST MODEL FOR " + str(i) + ' with '+ evaluator)
             best_index = specified_df[evaluator].idxmax()
-            print(best_index)
+            #print(best_index)
             best_mod = specified_df.loc[best_index][1:3]
-            print(best_mod)
-            print(specified_df.loc[best_index])
-            print()
+            #print(best_mod)
+            best_series = specified_df.loc[best_index]
+            print(best_series[['test_set', 'model', 'precision_at_5', 'accuracy_at_5', 'f1_score_at_5', 'recall_at_5']])
+            #print()
             if i == 'full':
-                create_curves(best_mod[0], best_mod[1], x_train, y_train, x_test, y_test, date)
+                #print(specified_df.loc[best_index])
+                pass
+                #create_curves(best_mod[0], best_mod[1], x_train, y_train, x_test, y_test, date)
 
 
-def create_curves(model, params, x_train, y_train, x_test, y_test, threshold=.05):
+def create_curves(model, params, x_train, y_train, x_test, y_test, date, threshold=.05):
     '''
     Prints area under the curve and creates and saves an ROC and precision-recall curves image
     Inputs:
@@ -279,30 +282,38 @@ def create_curves(model, params, x_train, y_train, x_test, y_test, threshold=.05
     Outputs: None
     '''
     clf = CLFS[model]
-    params = literal_eval(params)
-    clf.set_params(**params)
+    try:
+        clf.set_params(**params)
+    except:
+        clf.set_params(**literal_eval(params))
+    x_train = x_train.replace([np.inf, -np.inf], 0)
+    x_test = x_test.replace([np.inf, -np.inf], 0)
     clf.fit(x_train, y_train)
     predicted_scores = clf.predict_proba(x_test)[:, 1]
     y_scores_sorted, y_true_sorted = joint_sort_descending(
         np.array(predicted_scores), np.array(y_test))
-    preds_at_k = generate_binary_at_k(y_scores_sorted, threshold)
+    preds_at_k = y_scores_sorted
+    #preds_at_k = generate_binary_at_k(y_scores_sorted, threshold)
     auc = roc_auc_score(y_true_sorted, preds_at_k)
-    print(model)
+    #print(model)
     print('AUC: %.3f' % auc)
-    fpr, tpr, _ = roc_curve(y_true_sorted, preds_at_k)
+    fpr, tpr, thres = roc_curve(y_true_sorted, preds_at_k)
     plt.plot([0, 1], [0, 1], linestyle='--')
     plt.plot(fpr, tpr, marker='.')
     roc_title = "ROC " + model + " with " + str(params) + date
-    plt.title(roc_title)
     plt.savefig(roc_title + '.png')
     plt.clf()
-    plot_precision_recall_n(y_true_sorted, preds_at_k, model, params)
-
+    plot_precision_recall_n(y_true_sorted, preds_at_k, model, params, date)
+    fi = clf.feature_importances_
+    for i in range(len(fi)):
+        if fi[i] > 0.01:
+            pass
+            #print(fi[i], x_train.columns[i])
 
 # The code below also comes from Rayid Ghani's magic loop, again found here:
 # https://github.com/rayidghani/magicloops
 
-def plot_precision_recall_n(y_true, y_score, model, params):
+def plot_precision_recall_n(y_true, y_score, model, params, date):
     '''
     Plots and saves precision-recall curve for a given model
     Inputs:
@@ -313,7 +324,7 @@ def plot_precision_recall_n(y_true, y_score, model, params):
     Outputs: None
     '''
     precision_curve, recall_curve, pr_thresh = precision_recall_curve(y_true,
-                                                                      y_score)
+                                                                     y_score)
     precision_curve = precision_curve[:-1]
     recall_curve = recall_curve[:-1]
     pct_above_per_thresh = []
@@ -336,7 +347,6 @@ def plot_precision_recall_n(y_true, y_score, model, params):
     ax1.set_ylim([0, 1])
     ax2.set_xlim([0, 1])
     p_r_title = "Precision-Recall " + model + " with " + str(params) + date
-    plt.title(p_r_title)
     plt.savefig(p_r_title + '.png')
     plt.clf()
 
@@ -352,3 +362,17 @@ def rep_d_tree(dec_tree, features_lst):
                     filled=True, rounded=True, special_characters=True,)
     graph = pydotplus.graph_from_dot_data(dot_data.getvalue())
     Image(graph.write_png('decision_tree.png'))
+
+
+def plot_precision_recall2(recalls, precisions, thresholds):
+    #See https://scikit-learn.org/stable/auto_examples/model_selection/plot_precision_recall.html
+    #plot recall and precision at different thresholds
+    fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True)
+    
+    ax1.step(recalls[1:], thresholds, where='post')
+    ax2.step(precisions[1:], thresholds, where='post')
+    ax1.set_xlabel('recall')
+    ax1.set_ylabel('threshold')
+    ax2.set_xlabel('precision')
+    
+    fig.suptitle('Precision & Recall at different Thresholds')
