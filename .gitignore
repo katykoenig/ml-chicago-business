@@ -2,6 +2,7 @@
 .ipynb_checkpoints/
 *.sqlite3
 __pycache__/
-pld_pipeline/
+.vscode/
+pb_*
 *.csv
 
