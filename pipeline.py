@@ -245,21 +245,12 @@ def results_eval(results_df, evaluator_lst, train_df, test_df, target_att, featu
     _, test_df = discretize_dates(test_df, features_lst)
     x_test = test_df[features_lst]
     y_test = test_df[target_att]
-    for i in results_df['test_set'].unique():
-        specified_df = results_df[results_df['test_set'] == i]
-        for evaluator in evaluator_lst:
-            #print("BEST MODEL FOR " + str(i) + ' with '+ evaluator)
-            best_index = specified_df[evaluator].idxmax()
-            #print(best_index)
-            best_mod = specified_df.loc[best_index][1:3]
-            #print(best_mod)
-            best_series = specified_df.loc[best_index]
-            print(best_series[['test_set', 'model', 'precision_at_5', 'accuracy_at_5', 'f1_score_at_5', 'recall_at_5', 'auc_roc']])
-            #print()
-            if i == 'full':
-                #print(specified_df.loc[best_index])
-                pass
-                #create_curves(best_mod[0], best_mod[1], x_train, y_train, x_test, y_test, date)
+    for evaluator in evaluator_lst:
+        print("BEST MODEL FOR " + str(i) + ' with '+ evaluator)
+        best_index = results_df[evaluator].idxmax()
+        best_series = results_df.loc[best_index]
+        print(best_series[['model', 'precision_at_5', 'accuracy_at_5', 'f1_score_at_5', 'recall_at_5', 'auc_roc']])      
+        #create_curves(best_mod[0], best_mod[1], x_train, y_train, x_test, y_test, date)
 
 
 def create_curves(model, params, x_train, y_train, x_test, y_test, date, threshold=.05):
