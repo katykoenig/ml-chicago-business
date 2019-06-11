@@ -98,14 +98,10 @@ def clean_types(dataframe, date_cols=DATE_LST):
         if 'crime' in column: 
             drop_lst.append(column)
     dataframe.fillna(0, inplace=True)
+    dataframe = dataframe.drop(drop_lst, axis=1)
+    dataframe['census_tract'] = dataframe['block_group'].str[:13]
     return dataframe
-    '''
-    crime = process_crime()
-    joined = pd.merge(dataframe, crime, on='block_group')
-    joined.drop(columns=['block'], inplace=True)
-    joined.fillna(0, inplace=True)
-    return joined.loc[:, ~joined.columns.isin(drop_lst)]
-    '''
+
 
 
 CRIMES_LS = ['HOMICIDE', 'OTHER OFFENSE', 'ROBBERY', 'THEFT', 'NARCOTICS',

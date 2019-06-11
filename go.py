@@ -29,7 +29,8 @@ def go(model=None):
         train_df = pr.clean_types(train_df)
         test_df = pr.clean_types(test_df)
         train_df, test_df = pr.add_crimes(train_df, test_df, pair[0], pair[1])
-        features_lst, train_df = pl.generate_features(train_df, ['successful','earliest_issue', 'latest_issue','sf_id', 'block_group'])
+        features_lst, train_df = pl.generate_features(train_df, ['successful','earliest_issue', 'latest_issue','sf_id', 'block_group', 'block'])
+        return features_lst
         thresh_lst = [0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5]
         results_df = pl.combining_function2(features_lst, models_to_run, thresh_lst, 'successful', train_df, test_df)
         print('writing results for ' + pair[1])

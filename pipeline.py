@@ -90,7 +90,7 @@ def joint_sort_descending(array_one, array_two):
     return array_one[idx], array_two[idx]
 
 PARAMS_DICT = {
-    'random_forest': {'n_estimators': [10, 100, 500, 2000], 'max_depth': [1, 5, 10],
+    'random_forest': {'n_estimators': [10, 100, 500, 2000, 5000], 'max_depth': [1, 5, 10],
                       'min_samples_split': [2, 5, 10], 'n_jobs': [-1]},
     'logistic_regression': {'penalty': ['l2'], 'C': [0.01, 0.1, 1, 10],
                             'solver': ['lbfgs']},

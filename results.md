@@ -27,3 +27,21 @@ Name: 21, dtype: object
 0.21801351110953732 license_4404
 0.07221791332541236 license_4406
 0.0683538543349944 license_8340
+
+
+writing results for data/valid_2016-05-31_2016-06-01.csv
+BEST MODEL FOR auc_roc
+model             random_forest
+precision_at_5         0.585613
+accuracy_at_5          0.338647
+f1_score_at_5         0.0813321
+recall_at_5           0.0437007
+auc_roc                0.511728
+Name: 46, dtype: object
+0.40418468430461235 license_1010
+0.21130737381058445 license_1006
+0.23020932232577693 license_4404
+0.08502990819104694 license_4406
+0.06851780838417715 license_8340
+
+
