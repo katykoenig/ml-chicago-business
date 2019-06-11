@@ -20,7 +20,7 @@ from dateutil.relativedelta import relativedelta
 from sklearn.externals.six import StringIO
 import pydotplus
 from IPython.display import Image
-# import process_data as pr
+import process_data as pr
 from ast import literal_eval
 
 
@@ -89,9 +89,8 @@ def joint_sort_descending(array_one, array_two):
     idx = np.argsort(array_one)[::-1]
     return array_one[idx], array_two[idx]
 
-
 PARAMS_DICT = {
-    'random_forest': {'n_estimators': [10, 100, 500], 'max_depth': [1, 5, 10],
+    'random_forest': {'n_estimators': [10, 100, 500, 2000], 'max_depth': [1, 5, 10],
                       'min_samples_split': [2, 5, 10], 'n_jobs': [-1]},
     'logistic_regression': {'penalty': ['l2'], 'C': [0.01, 0.1, 1, 10],
                             'solver': ['lbfgs']},
@@ -127,28 +126,28 @@ RESULTS_COLS = ['model', 'parameters', 'train_start', 'train_end', 'test_start',
                 'accuracy_at_50', 'precision_at_50', 'recall_at_50',
                 'f1_score_at_50', 'auc_roc_at_50']
 
-RESULTS_COLS2 = ['test_set', 'model', 'parameters', 'train_start', 'train_end', 'test_start',
+RESULTS_COLS2 = ['model', 'parameters', 'train_start', 'train_end', 'test_start',
                 'test_end', 'test_baseline', 'accuracy_at_1', 'precision_at_1',
-                'recall_at_1', 'f1_score_at_1', 'auc_roc_at_1', 'accuracy_at_2',
+                'recall_at_1', 'f1_score_at_1', 'accuracy_at_2',
                 'precision_at_2', 'recall_at_2', 'f1_score_at_2',
-                'auc_roc_at_2', 'accuracy_at_5', 'precision_at_5',
-                'recall_at_5', 'f1_score_at_5', 'auc_roc_at_5',
+                'accuracy_at_5', 'precision_at_5',
+                'recall_at_5', 'f1_score_at_5', 
                 'accuracy_at_10', 'precision_at_10', 'recall_at_10',
-                'f1_score_at_10', 'auc_roc_at_10', 'accuracy_at_20',
+                'f1_score_at_10', 'accuracy_at_20',
                 'precision_at_20', 'recall_at_20', 'f1_score_at_20',
-                'auc_roc_at_20', 'accuracy_at_30', 'precision_at_30',
-                'recall_at_1', 'f1_score_at_30', 'auc_roc_at_30',
+                'accuracy_at_30', 'precision_at_30',
+                'recall_at_1', 'f1_score_at_30',
                 'accuracy_at_50', 'precision_at_50', 'recall_at_50',
-                'f1_score_at_50', 'auc_roc_at_50']
+                'f1_score_at_50', 'auc_roc']
 
 
 
 bdict = {
     'pct_high_travel_time': 0.95,
-    'pct_below_pov': 0.95,
-    'pct_race_black': 0.95,
-    'pct_high_inc': 0.95,
-    'pct_race_white': 0.10
+    'pct_below_poverty': 0.95,
+    'pct_black': 0.95,
+    'pct_high_income': 0.95,
+    'pct_white': 0.10
         }
 
 def get_special_index(x_test, boundary_dict=bdict):
@@ -200,30 +199,23 @@ def combining_function2(features_lst, model_lst, threshold_lst, target_att, trai
                        test_end, np.mean(y_test)]
             clf.set_params(**param)
             clf.fit(x_train, y_train)
-            subset_indexes = get_special_index(x_test)
-            for key, indx in subset_indexes.items():
-                if key == 'full':
-                    sub_x_t = x_test
-                    sub_y_t = y_test
-                else:
-                    sub_x_t = x_test.iloc[indx]
-                    sub_y_t = y_test.iloc[indx]
-                predicted_scores = clf.predict_proba(sub_x_t)[:, 1]
-                total_lst = []
-                # Loop through thresholds,
-                # and generating evaluation metrics for each model
-                for threshold in threshold_lst:
-                    y_scores_sorted, y_true_sorted = joint_sort_descending(
-                        np.array(predicted_scores), np.array(sub_y_t))
-                    preds_at_k = generate_binary_at_k(y_scores_sorted,
-                                                      threshold)
-                    acc = accuracy(y_true_sorted, preds_at_k)
-                    prec = precision_score(y_true_sorted, preds_at_k)
-                    recall = recall_score(y_true_sorted, preds_at_k)
-                    f_one = f1_score(y_true_sorted, preds_at_k)
-                    auc_roc = roc_auc_score(y_true_sorted, preds_at_k)
-                    total_lst += [acc, prec, recall, f_one, auc_roc]
-                results_df.loc[len(results_df)] = [key] + row_lst + total_lst
+            total_lst = []
+
+            predicted_scores = clf.predict_proba(x_test)[:, 1]
+            # Loop through thresholds,
+            # and generating evaluation metrics for each model
+            for threshold in threshold_lst:
+                y_scores_sorted, y_true_sorted = joint_sort_descending(
+                    np.array(predicted_scores), np.array(y_test))
+                preds_at_k = generate_binary_at_k(y_scores_sorted,
+                                                  threshold)
+                acc = accuracy(y_true_sorted, preds_at_k)
+                prec = precision_score(y_true_sorted, preds_at_k)
+                recall = recall_score(y_true_sorted, preds_at_k)
+                f_one = f1_score(y_true_sorted, preds_at_k)
+                total_lst += [acc, prec, recall, f_one]
+            auc_roc = roc_auc_score(y_true_sorted, predicted_scores)
+            results_df.loc[len(results_df)] = row_lst + total_lst + [auc_roc]
     return results_df
 
 
@@ -252,21 +244,22 @@ def results_eval(results_df, evaluator_lst, train_df, test_df, target_att, featu
     _, test_df = discretize_dates(test_df, features_lst)
     x_test = test_df[features_lst]
     y_test = test_df[target_att]
-    for i in results_df['test_set'].unique():
-        specified_df = results_df[results_df['test_set'] == i]
-        for evaluator in evaluator_lst:
-            print("BEST MODEL FOR " + str(i) + ' with '+ evaluator)
-            best_index = specified_df[evaluator].idxmax()
-            print(best_index)
-            best_mod = specified_df.loc[best_index][1:3]
-            print(best_mod)
-            print(specified_df.loc[best_index])
-            print()
-            if i == 'full':
-                create_curves(best_mod[0], best_mod[1], x_train, y_train, x_test, y_test, date)
+    for evaluator in evaluator_lst:
+        print("BEST MODEL FOR " + evaluator)
+        best_index = results_df[evaluator].idxmax()
+        best_series = results_df.loc[best_index]
+        print(best_series[['model', 'precision_at_5', 'accuracy_at_5', 'f1_score_at_5', 'recall_at_5', 'auc_roc']])      
+        #create_curves(best_mod[0], best_mod[1], x_train, y_train, x_test, y_test, date)
 
+def print_feature_importance(x_train, y_train):
+    clf = DecisionTreeClassifier(max_depth=5, min_samples_split=10)
+    clf.fit(x_train, y_train)
+    fi = clf.feature_importances_
+    for i in range(len(fi)):
+        if fi[i] > 0.01:
+            print(fi[i], x_train.columns[i])
 
-def create_curves(model, params, x_train, y_train, x_test, y_test, threshold=.05):
+def create_curves(model, params, x_train, y_train, x_test, y_test, date, threshold=.05):
     '''
     Prints area under the curve and creates and saves an ROC and precision-recall curves image
     Inputs:
@@ -279,30 +272,38 @@ def create_curves(model, params, x_train, y_train, x_test, y_test, threshold=.05
     Outputs: None
     '''
     clf = CLFS[model]
-    params = literal_eval(params)
-    clf.set_params(**params)
+    try:
+        clf.set_params(**params)
+    except:
+        clf.set_params(**literal_eval(params))
+    x_train = x_train.replace([np.inf, -np.inf], 0)
+    x_test = x_test.replace([np.inf, -np.inf], 0)
     clf.fit(x_train, y_train)
     predicted_scores = clf.predict_proba(x_test)[:, 1]
     y_scores_sorted, y_true_sorted = joint_sort_descending(
         np.array(predicted_scores), np.array(y_test))
-    preds_at_k = generate_binary_at_k(y_scores_sorted, threshold)
+    preds_at_k = y_scores_sorted
+    #preds_at_k = generate_binary_at_k(y_scores_sorted, threshold)
     auc = roc_auc_score(y_true_sorted, preds_at_k)
-    print(model)
+    #print(model)
     print('AUC: %.3f' % auc)
-    fpr, tpr, _ = roc_curve(y_true_sorted, preds_at_k)
+    fpr, tpr, thres = roc_curve(y_true_sorted, preds_at_k)
     plt.plot([0, 1], [0, 1], linestyle='--')
     plt.plot(fpr, tpr, marker='.')
     roc_title = "ROC " + model + " with " + str(params) + date
-    plt.title(roc_title)
     plt.savefig(roc_title + '.png')
     plt.clf()
-    plot_precision_recall_n(y_true_sorted, preds_at_k, model, params)
-
+    plot_precision_recall_n(y_true_sorted, preds_at_k, model, params, date)
+    fi = clf.feature_importances_
+    for i in range(len(fi)):
+        if fi[i] > 0.01:
+            pass
+            #print(fi[i], x_train.columns[i])
 
 # The code below also comes from Rayid Ghani's magic loop, again found here:
 # https://github.com/rayidghani/magicloops
 
-def plot_precision_recall_n(y_true, y_score, model, params):
+def plot_precision_recall_n(y_true, y_score, model, params, date):
     '''
     Plots and saves precision-recall curve for a given model
     Inputs:
@@ -313,7 +314,7 @@ def plot_precision_recall_n(y_true, y_score, model, params):
     Outputs: None
     '''
     precision_curve, recall_curve, pr_thresh = precision_recall_curve(y_true,
-                                                                      y_score)
+                                                                     y_score)
     precision_curve = precision_curve[:-1]
     recall_curve = recall_curve[:-1]
     pct_above_per_thresh = []
@@ -336,7 +337,6 @@ def plot_precision_recall_n(y_true, y_score, model, params):
     ax1.set_ylim([0, 1])
     ax2.set_xlim([0, 1])
     p_r_title = "Precision-Recall " + model + " with " + str(params) + date
-    plt.title(p_r_title)
     plt.savefig(p_r_title + '.png')
     plt.clf()
 
@@ -352,3 +352,17 @@ def rep_d_tree(dec_tree, features_lst):
                     filled=True, rounded=True, special_characters=True,)
     graph = pydotplus.graph_from_dot_data(dot_data.getvalue())
     Image(graph.write_png('decision_tree.png'))
+
+
+def plot_precision_recall2(recalls, precisions, thresholds):
+    #See https://scikit-learn.org/stable/auto_examples/model_selection/plot_precision_recall.html
+    #plot recall and precision at different thresholds
+    fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True)
+    
+    ax1.step(recalls[1:], thresholds, where='post')
+    ax2.step(precisions[1:], thresholds, where='post')
+    ax1.set_xlabel('recall')
+    ax1.set_ylabel('threshold')
+    ax2.set_xlabel('precision')
+    
+    fig.suptitle('Precision & Recall at different Thresholds')

@@ -14,7 +14,6 @@ def get_chicago_data():
     CSV_FRAG = '/rows.csv?accessType=DOWNLOAD'
     URLS = {'business': CSV_URL + 'xqx5-8hwx' + CSV_FRAG,
             'blocks': CSV_URL + 'bt9m-d2mf' + CSV_FRAG,
-            '311': CSV_URL + 'v6vf-nfxy' + CSV_FRAG,
             'crimes': CSV_URL + 'ijzp-q8t2' + CSV_FRAG} #datasets to download
     for key, val in URLS.items():
         if not os.path.isfile(key + '.csv'): #check if already downloaded
@@ -23,7 +22,7 @@ def get_chicago_data():
             if key == 'business':
                 df = df[df['CITY'] == 'CHICAGO']
             if key == 'crimes':
-                df = df[df['Date'] > '1/1/2010']
+                df = df[df['Date'] > '1/1/2009']
             df.to_csv(key + '.csv')
             print(key, 'saved')
         else:
