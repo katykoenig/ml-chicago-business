@@ -1,3 +1,68 @@
+#with census tracts (see feature lst below)
+
+writing results for data/valid_2014-05-31_2014-06-01.csv
+BEST MODEL FOR auc_roc
+model             random_forest
+precision_at_5         0.743525
+accuracy_at_5          0.330151
+f1_score_at_5         0.0998913
+recall_at_5           0.0535423
+auc_roc                0.507654
+Name: 35, dtype: object
+0.12835714820510474 license_1329
+0.5824916621174718 license_1010
+0.03603147122741269 license_1012
+0.24516223309230747 license_1006
+
+writing results for data/valid_2015-05-31_2015-06-01.csv
+BEST MODEL FOR auc_roc
+model             random_forest
+precision_at_5         0.854128
+accuracy_at_5          0.338485
+f1_score_at_5          0.114335
+recall_at_5           0.0612684
+auc_roc                0.513775
+Name: 19, dtype: object
+0.42306505426414875 license_1010
+0.2177845639825049 license_1006
+0.21820460982031722 license_4404
+0.07222295957877867 license_4406
+0.06835863058581161 license_8340
+
+writing results for data/valid_2016-05-31_2016-06-01.csv
+BEST MODEL FOR auc_roc
+model                   knn
+precision_at_5     0.678531
+accuracy_at_5      0.347937
+f1_score_at_5      0.094237
+recall_at_5       0.0506347
+auc_roc            0.511265
+Name: 69, dtype: object
+0.4041886014992585 license_1010
+0.21130942171627096 license_1006
+0.23021155342151098 license_4404
+0.0850307322665601 license_4406
+0.06851847243109083 license_8340
+
+BEST MODEL FOR auc_roc
+model             random_forest
+precision_at_5         0.652375
+accuracy_at_5          0.415573
+f1_score_at_5          0.100389
+recall_at_5           0.0543786
+auc_roc                 0.50921
+Name: 19, dtype: object
+0.6176142104505442 license_1010
+0.010020747651007265 license_1011
+0.09182518166756577 license_1012
+0.12521408731145942 license_1006
+0.1549213150622894 license_4404
+
+
+
+
+#with patrick's crime cols and block group
+
 writing results for data/valid_2014-05-31_2014-06-01.csv
 BEST MODEL FOR auc_roc
 model             random_forest
