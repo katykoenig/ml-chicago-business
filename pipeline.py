@@ -89,7 +89,6 @@ def joint_sort_descending(array_one, array_two):
     idx = np.argsort(array_one)[::-1]
     return array_one[idx], array_two[idx]
 
-
 PARAMS_DICT = {
     'random_forest': {'n_estimators': [10, 100, 500, 2000], 'max_depth': [1, 5, 10],
                       'min_samples_split': [2, 5, 10], 'n_jobs': [-1]},
@@ -246,12 +245,19 @@ def results_eval(results_df, evaluator_lst, train_df, test_df, target_att, featu
     x_test = test_df[features_lst]
     y_test = test_df[target_att]
     for evaluator in evaluator_lst:
-        print("BEST MODEL FOR " + str(i) + ' with '+ evaluator)
+        print("BEST MODEL FOR " + evaluator)
         best_index = results_df[evaluator].idxmax()
         best_series = results_df.loc[best_index]
         print(best_series[['model', 'precision_at_5', 'accuracy_at_5', 'f1_score_at_5', 'recall_at_5', 'auc_roc']])      
         #create_curves(best_mod[0], best_mod[1], x_train, y_train, x_test, y_test, date)
 
+def print_feature_importance(x_train, y_train):
+    clf = DecisionTreeClassifier(max_depth=5, min_samples_split=10)
+    clf.fit(x_train, y_train)
+    fi = clf.feature_importances_
+    for i in range(len(fi)):
+        if fi[i] > 0.01:
+            print(fi[i], x_train.columns[i])
 
 def create_curves(model, params, x_train, y_train, x_test, y_test, date, threshold=.05):
     '''

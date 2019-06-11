@@ -5,10 +5,10 @@ import pipeline as pl
 #import descriptive_stats as ds
 from dateutil.relativedelta import relativedelta
 
-DATA_LST = [('data/train_2010-01-01_2012-06-01.csv', 'data/valid_2014-05-31_2014-06-01.csv')]#,
-            #('data/train_2010-01-01_2013-06-01.csv', 'data/valid_2015-05-31_2015-06-01.csv'),
-            #('data/train_2010-01-01_2014-06-01.csv', 'data/valid_2016-05-31_2016-06-01.csv'),
-            #('data/train_2010-01-01_2015-06-01.csv', 'data/valid_2017-05-31_2017-06-01.csv')]
+DATA_LST = [('data/train_2010-01-01_2012-06-01.csv', 'data/valid_2014-05-31_2014-06-01.csv'),
+            ('data/train_2010-01-01_2013-06-01.csv', 'data/valid_2015-05-31_2015-06-01.csv'),
+            ('data/train_2010-01-01_2014-06-01.csv', 'data/valid_2016-05-31_2016-06-01.csv'),
+            ('data/train_2010-01-01_2015-06-01.csv', 'data/valid_2017-05-31_2017-06-01.csv')]
 
 def go(model=None):
     '''
@@ -36,6 +36,7 @@ def go(model=None):
         results_df.to_csv(pair[1][5:-4] + str(pd.Timestamp.now()) + '.csv')
         eval_lst = ['auc_roc']
         pl.results_eval(results_df, eval_lst, train_df, test_df, 'successful', features_lst, pair[1][5:-4])
+        pl.print_feature_importance(train_df[features_lst], train_df['successful'])
 
 file = 'valid_2014-05-31_2014-06-012019-06-06 18:41:59.075021.csv'
 eval_lst = ['accuracy_at_5', 'precision_at_5', 'recall_at_5', 'f1_score_at_5', 'auc_roc']
