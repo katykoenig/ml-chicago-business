@@ -57,6 +57,7 @@ Name: 19, dtype: object
 0.09182518166756577 license_1012
 0.12521408731145942 license_1006
 0.1549213150622894 license_4404
+Params: {'n_jobs': -1, 'min_samples_split': 2, 'n_estimators': 100, 'max_depth': 1}
 
 
 
@@ -123,6 +124,38 @@ Name: 34, dtype: object
 0.09182518166756577 license_1012
 0.12521408731145942 license_1006
 0.1549213150622894 license_4404
+
+
+
+# without license type
+
+model                                                 random_forest
+parameters        {'max_depth': 5, 'n_jobs': -1, 'min_samples_sp...
+precision_at_5                                             0.540749
+accuracy_at_5                                              0.404413
+f1_score_at_5                                              0.083212
+recall_at_5                                               0.0450741
+auc_roc                                                    0.508558
+Name: 41, dtype: object
+0.15479645439242826 storefronts_on_block
+0.04065721513305201 police_district
+0.08599731025207903 total_bachelors_degrees
+0.03146195824344789 total_population
+0.02803161918674767 pct_male_working
+0.04244466288023889 pct_female_working
+0.051871127431864686 pct_low_travel_time
+0.03831727210925018 pct_below_median_income
+0.03114564779555768 pct_white
+0.027906647886023463 census_tract
+0.03729512618819318 THEFT
+0.015915334619188322 NARCOTICS
+0.02270973655404302 CRIMINAL TRESPASS
+0.034848776421386896 OFFENSE INVOLVING CHILDREN
+0.08640272442598905 Total_Arrests
+0.2701983864805099 month_issue
+{'max_depth': 5, 'n_jobs': -1, 'min_samples_split': 5, 'n_estimators': 2000}
+
+
 
 
 #features
