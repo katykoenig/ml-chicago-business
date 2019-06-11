@@ -1,3 +1,188 @@
+#final as of tue 540pm
+
+
+writing results for data/valid_2014-05-31_2014-06-01.csv
+BEST MODEL FOR auc_roc
+model                  knn
+precision_at_5    0.759353
+accuracy_at_5     0.331733
+f1_score_at_5     0.102018
+recall_at_5       0.054682
+auc_roc           0.525877
+Name: 61, dtype: object
+0.1948815790757881 storefronts_on_block
+0.01621416689127304 police_district
+0.0493339331730308 pct_medium_travel_time
+0.023001848984061914 pct_below_median_income
+0.024100468468792536 pct_black
+0.013764464216348169 pct_hispanic
+0.22658502441293218 census_tract
+0.08092599023941097 THEFT
+0.06446931746765185 CRIMINAL TRESPASS
+0.01810980388178879 MOTOR VEHICLE THEFT
+0.024036446414370694 Total_Arrests
+0.2570895624754538 month_issue
+
+
+
+
+
+writing results for data/valid_2015-05-31_2015-06-01.csv
+BEST MODEL FOR auc_roc
+model                   knn
+precision_at_5     0.770826
+accuracy_at_5      0.330156
+f1_score_at_5      0.103184
+recall_at_5       0.0552929
+auc_roc            0.522634
+Name: 61, dtype: object
+0.22747386243636206 storefronts_on_block
+0.03559735800655597 police_district
+0.12864758980404808 block_group
+0.03503325647064587 pct_male_children
+0.03678334838629126 pct_high_travel_time
+0.026555257934462215 pct_below_poverty
+0.025476858499809883 pct_below_median_income
+0.03993770484769659 pct_black
+0.09548955537895247 pct_hispanic
+0.016028605494256654 OTHER OFFENSE
+0.014612866864426229 THEFT
+0.026577190071570975 BURGLARY
+0.03886961829267243 KIDNAPPING
+0.2398301817576395 month_issue
+
+
+writing results for data/valid_2016-05-31_2016-06-01.csv
+BEST MODEL FOR auc_roc
+model             random_forest
+precision_at_5         0.700637
+accuracy_at_5          0.350147
+f1_score_at_5         0.0973071
+recall_at_5           0.0522843
+auc_roc                0.526554
+Name: 18, dtype: object
+0.2033889245880266 storefronts_on_block
+0.035891309097612005 police_district
+0.04786270494904698 block_group
+0.03297597532288257 pct_male_working
+0.0693185766692661 pct_male_elderly
+0.03312503569038093 pct_high_travel_time
+0.011494951900626918 pct_below_poverty
+0.09440812237703534 pct_above_median_income
+0.04962150306379914 pct_black
+0.06305882797512172 pct_asian
+0.033340172732757696 pct_hispanic
+0.017600702717251848 census_tract
+0.044082552785588786 THEFT
+0.018457222658087673 GAMBLING
+0.23841540885273052 month_issue
+
+writing results for data/valid_2017-05-31_2017-06-01.csv
+BEST MODEL FOR auc_roc
+model             random_forest
+precision_at_5         0.625338
+accuracy_at_5           0.41287
+f1_score_at_5         0.0962287
+recall_at_5           0.0521249
+auc_roc                0.528473
+Name: 26, dtype: object
+0.1547413330639465 storefronts_on_block
+0.0406427375423391 police_district
+0.01507980953859365 block_group
+0.08596668754818339 total_bachelors_degrees
+0.03145075498338729 total_population
+0.04211129963741711 pct_male_working
+0.0424295487988854 pct_female_working
+0.05185265668933306 pct_low_travel_time
+0.038303627746717785 pct_below_median_income
+0.031134557170196427 pct_white
+0.013172990183963201 census_tract
+0.03728184580067102 THEFT
+0.01590966734217681 NARCOTICS
+0.022701649864633737 CRIMINAL TRESPASS
+0.08637195735852941 Total_Arrests
+0.020746704947906345 Total_Domestic
+0.27010217178311974 month_issue
+
+
+
+
+features
+['storefronts_on_block',
+ 'police_district',
+ 'block_group',
+ 'total_bachelors_degrees',
+ 'total_population',
+ 'pct_male_children',
+ 'pct_male_working',
+ 'pct_male_elderly',
+ 'pct_female_children',
+ 'pct_female_working',
+ 'pct_female_elderly',
+ 'pct_low_travel_time',
+ 'pct_medium_travel_time',
+ 'pct_high_travel_time',
+ 'pct_below_poverty',
+ 'pct_below_median_income',
+ 'pct_above_median_income',
+ 'pct_high_income',
+ 'pct_white',
+ 'pct_black',
+ 'pct_asian',
+ 'pct_hispanic',
+ 'census_tract',
+ 'HOMICIDE',
+ 'OTHER OFFENSE',
+ 'ROBBERY',
+ 'THEFT',
+ 'NARCOTICS',
+ 'BATTERY',
+ 'ASSAULT',
+ 'CRIMINAL DAMAGE',
+ 'CRIMINAL TRESPASS',
+ 'PUBLIC PEACE VIOLATION',
+ 'MOTOR VEHICLE THEFT',
+ 'DECEPTIVE PRACTICE',
+ 'WEAPONS VIOLATION',
+ 'INTERFERENCE WITH PUBLIC OFFICER',
+ 'BURGLARY',
+ 'CRIM SEXUAL ASSAULT',
+ 'OFFENSE INVOLVING CHILDREN',
+ 'PUBLIC INDECENCY',
+ 'SEX OFFENSE',
+ 'KIDNAPPING',
+ 'PROSTITUTION',
+ 'INTIMIDATION',
+ 'ARSON',
+ 'LIQUOR LAW VIOLATION',
+ 'CONCEALED CARRY LICENSE VIOLATION',
+ 'GAMBLING',
+ 'OTHER NARCOTIC VIOLATION',
+ 'STALKING',
+ 'OBSCENITY',
+ 'HUMAN TRAFFICKING',
+ 'NON-CRIMINAL',
+ 'NON-CRIMINAL (SUBJECT SPECIFIED)',
+ 'NON - CRIMINAL',
+ 'Total_Crimes',
+ 'Total_Arrests',
+ 'Total_Domestic',
+ 'month_issue']
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #with census tracts (see feature lst below)
 
 writing results for data/valid_2014-05-31_2014-06-01.csv
