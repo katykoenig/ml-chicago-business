@@ -89,8 +89,14 @@ def joint_sort_descending(array_one, array_two):
     idx = np.argsort(array_one)[::-1]
     return array_one[idx], array_two[idx]
 
+'''
+'random_forest': {'n_estimators': [10, 100, 500, 2000, 5000], 'max_depth': [1, 5, 10],
+                      'min_samples_split': [2, 5, 10], 'n_jobs': [-1]}
+'''
+
+
 PARAMS_DICT = {
-    'random_forest': {'n_estimators': [10, 100, 500, 2000, 5000], 'max_depth': [1, 5, 10],
+    'random_forest': {'n_estimators': [10, 100, 500, 1000], 'max_depth': [1, 5, 10],
                       'min_samples_split': [2, 5, 10], 'n_jobs': [-1]},
     'logistic_regression': {'penalty': ['l2'], 'C': [0.01, 0.1, 1, 10],
                             'solver': ['lbfgs']},
@@ -188,6 +194,8 @@ def combining_function2(features_lst, model_lst, threshold_lst, target_att, trai
     y_test = test_df[target_att]
     # Loop through models and differing parameters
     # while fitting each model with split data
+    max_target = 0
+    best_mod = []
     for model in model_lst:
         print('Running model ' + model + ' for test start date ' + str(test_start))
         print(model)
@@ -202,6 +210,7 @@ def combining_function2(features_lst, model_lst, threshold_lst, target_att, trai
             total_lst = []
 
             predicted_scores = clf.predict_proba(x_test)[:, 1]
+            #return [x_test, y_test, predicted_scores]
             # Loop through thresholds,
             # and generating evaluation metrics for each model
             for threshold in threshold_lst:
@@ -214,8 +223,20 @@ def combining_function2(features_lst, model_lst, threshold_lst, target_att, trai
                 recall = recall_score(y_true_sorted, preds_at_k)
                 f_one = f1_score(y_true_sorted, preds_at_k)
                 total_lst += [acc, prec, recall, f_one]
-            auc_roc = roc_auc_score(y_true_sorted, predicted_scores)
+            auc_roc = roc_auc_score(y_test, predicted_scores)
             results_df.loc[len(results_df)] = row_lst + total_lst + [auc_roc]
+            print(max_target)
+
+            if auc_roc > max_target:
+                max_target = auc_roc
+                best_mod = [x_test, y_test, predicted_scores]
+
+
+    scores = best_mod[0]
+    scores['true'] = best_mod[1]
+    scores['scores'] = best_mod[2]
+    scores.to_csv('predscores.csv')
+
     return results_df
 
 
@@ -317,6 +338,7 @@ def plot_precision_recall_n(y_true, y_score, model, params, date):
                                                                      y_score)
     precision_curve = precision_curve[:-1]
     recall_curve = recall_curve[:-1]
+
     pct_above_per_thresh = []
     number_scored = len(y_score)
     for value in pr_thresh:
@@ -338,6 +360,18 @@ def plot_precision_recall_n(y_true, y_score, model, params, date):
     ax2.set_xlim([0, 1])
     p_r_title = "Precision-Recall " + model + " with " + str(params) + date
     plt.savefig(p_r_title + '.png')
+    plt.clf()
+
+    fpr, tpr, thres = roc_curve(y_true, y_score)
+    auc_roc = roc_auc_score(y_true, y_score)
+    print(auc_roc)
+    plt.plot([0, 1], [0, 1], linestyle='--')
+    plt.plot(fpr, tpr, marker='.')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    roc_title = "ROC " + model + " with " + str(params) + date
+    plt.title("ROC")
+    plt.savefig(roc_title + '.png')
     plt.clf()
 
 

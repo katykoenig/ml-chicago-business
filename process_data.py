@@ -97,9 +97,11 @@ def clean_types(dataframe, date_cols=DATE_LST):
     for column in dataframe.columns: 
         if 'crime' in column: 
             drop_lst.append(column)
+        if 'license' in column:
+            drop_lst.append(column)
     dataframe.fillna(0, inplace=True)
     dataframe = dataframe.drop(drop_lst, axis=1)
-    dataframe['census_tract'] = dataframe['block_group'].str[:13]
+    dataframe['census_tract'] = dataframe['block_group'].str[:11]
     return dataframe
 
 
