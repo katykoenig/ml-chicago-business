@@ -16,6 +16,7 @@ import argparse
 import ast
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 import requests
 import shapely
 import sqlite3
@@ -44,6 +45,7 @@ LICENSES_COLUMNS = (
     "license_code",
     "date_issued",
     "expiration_date",
+    "police_district",
     "latitude",
     "longitude"
 )
@@ -197,7 +199,7 @@ class Entrepreneurship:
         self.cursor.executescript(create_crimes_table)
         self.connection.commit()
         self.download_chicago_data(CRIMES_API, CRIMES_COLUMNS, "crimes")
-        self.spatial_join_on_blocks("crimes")
+        self.spatial_join_on_blocks("crimes", CRIMES_COLUMNS)
     
 
     def create_licenses_table(self):
@@ -210,6 +212,7 @@ class Entrepreneurship:
             license_code        VARCHAR,
             issue_date          NUMERIC,
             expiry_date         NUMERIC,
+            police_district     NUMERIC,
             latitude            NUMERIC,
             longitude           NUMERIC
         );
@@ -217,7 +220,7 @@ class Entrepreneurship:
         self.cursor.executescript(create_licenses_table)
         self.connection.commit()
         self.download_chicago_data(LICENSES_API, LICENSES_COLUMNS, "licenses")
-        self.spatial_join_on_blocks("licenses")
+        self.spatial_join_on_blocks("licenses", LICENSES_COLUMNS)
 
 
     def download_chicago_data(self, api, columns, table):
@@ -251,49 +254,32 @@ class Entrepreneurship:
             self.connection.commit()
 
 
-    def spatial_join_on_blocks(self, table, commit_interval=100):
+    def spatial_join_on_blocks(self, table, columns):
 
-        # Alter table to include a block column.
-        alter_table = f"ALTER TABLE {table} ADD block NUMERIC;"
-        self.cursor.execute(alter_table)
-        # Collect census blocks.
-        get_blocks = "SELECT * FROM blocks;"
-        blocks = gpd.GeoDataFrame(
-            self.cursor.execute(get_blocks).fetchall(),
-            columns=["the_geom", "block"]
-        )
-        blocks["the_geom"] = blocks["the_geom"].apply(ast.literal_eval)
-        blocks["the_geom"] = blocks["the_geom"].apply(shapely.geometry.shape)
-        blocks = blocks.set_geometry("the_geom")
-        # Collect record coordinates.
-        get_coordinates = f'''
-        SELECT DISTINCT latitude, longitude 
+        # Collect records from table.
+        get_records = f'''
+        SELECT * 
         FROM {table} 
         WHERE (latitude IS NOT NULL OR longitude IS NOT NULL)
         AND (latitude IS NOT 'None' OR longitude IS NOT 'None');
         '''
-        coordinates = gpd.GeoDataFrame(
-            self.cursor.execute(get_coordinates).fetchall(),
-            columns=["latitude", "longitude"]
-        )
-        coordinates["the_geom"] = coordinates.apply(
+        records = pd.read_sql(get_records, self.connection)
+        records["the_geom"] = records.apply(
             lambda x: shapely.geometry.Point(x["longitude"], x["latitude"]),
             axis=1
         )
-        coordinates = coordinates.set_geometry("the_geom")
-        # Join coordinates and blocks on intersection of their geometry.
-        coordinates_blocks = gpd.sjoin(coordinates, blocks)
-        for i, row in coordinates_blocks.iterrows():
-            # Associate records with these coordiantes to this block.
-            update_with_block = f'''
-            UPDATE {table} 
-            SET block = ? 
-            WHERE latitude = ? AND longitude = ?;
-            '''
-            parameters = (row["block"], row["latitude"], row["longitude"])
-            self.cursor.execute(update_with_block, parameters)
-            if i % commit_interval == 0:
-                self.connection.commit()
+        records = gpd.GeoDataFrame(records).set_geometry("the_geom")
+        # Collect census blocks.
+        get_blocks = "SELECT * FROM blocks;"
+        blocks = pd.read_sql(get_blocks, self.connection)
+        blocks["the_geom"] = blocks["the_geom"].apply(ast.literal_eval)
+        blocks["the_geom"] = blocks["the_geom"].apply(shapely.geometry.shape)
+        blocks = gpd.GeoDataFrame(blocks).set_geometry("the_geom")
+        # Join records and blocks on intersection of their geometry.
+        columns = list(columns) + ["block"]
+        joined = gpd.sjoin(records, blocks)
+        joined = joined[columns]
+        joined.to_sql(table, self.connection, if_exists="replace", index=False)
         self.connection.commit()
 
 

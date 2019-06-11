@@ -105,6 +105,7 @@ def temporal_select(db_con, train_lb, train_ub, valid_lb, valid_ub, buffer, \
             SELECT 
                 account_number || '-' || site_number AS sf_id, 
                 block, 
+                police_district, 
                 RANK() OVER ( 
                     PARTITION BY account_number, site_number 
                     ORDER BY issue_date DESC 
@@ -125,13 +126,14 @@ def temporal_select(db_con, train_lb, train_ub, valid_lb, valid_ub, buffer, \
             AND DATETIME(expiry_date) >= DATETIME('{lb}') 
             AND DATETIME(issue_date) < DATETIME('{ub}') 
             GROUP BY block 
-        )
+        ) 
     SELECT DISTINCT 
         sf_id, 
         earliest_issue, 
         latest_issue, 
         storefronts_on_block, 
         block, 
+        police_district, 
         successful 
     FROM storefronts_success 
     JOIN storefronts_location USING (sf_id) 
@@ -189,32 +191,37 @@ def temporal_select(db_con, train_lb, train_ub, valid_lb, valid_ub, buffer, \
     for batch in licenses_join_complete:
         licenses = licenses.merge(batch, on="sf_id")
     # Request and collect crimes extant in training period by block.
+    crime_lb = lb - np.timedelta64(1, "Y")
     select_crime_general = f'''
     WITH 
         domestic AS ( 
-            SELECT block, COUNT(domestic) AS domestic_sum 
+            SELECT block, COUNT(domestic) AS domestic_count 
             FROM crimes 
-            WHERE DATETIME(date) >= DATETIME('{train_lb}') 
+            WHERE DATETIME(date) >= DATETIME('{crime_lb}') 
             AND DATETIME(date) < DATETIME('{train_ub}') 
             AND domestic = 'True' 
             GROUP BY block 
         ), 
         arrest AS ( 
-            SELECT block, COUNT(arrest) AS arrest_sum 
+            SELECT block, COUNT(arrest) AS arrest_count 
             FROM crimes 
-            WHERE DATETIME(date) >= DATETIME('{train_lb}') 
+            WHERE DATETIME(date) >= DATETIME('{crime_lb}') 
             AND DATETIME(date) < DATETIME('{train_ub}') 
             AND arrest = 'True' 
             GROUP BY block 
-        ),
+        ), 
         sum AS (
-            SELECT block, COUNT(crime) AS crime_sum 
+            SELECT block, COUNT(crime) AS crime_count 
             FROM crimes 
-            WHERE DATETIME(date) >= DATETIME('{train_lb}') 
+            WHERE DATETIME(date) >= DATETIME('{crime_lb}') 
             AND DATETIME(date) < DATETIME('{train_ub}') 
             GROUP BY block 
         ) 
-    SELECT DISTINCT block 
+    SELECT
+        block, 
+        domestic_count, 
+        arrest_count, 
+        crime_count 
     FROM blocks 
     LEFT JOIN domestic USING (block) 
     LEFT JOIN arrest USING (block) 
@@ -231,7 +238,7 @@ def temporal_select(db_con, train_lb, train_ub, valid_lb, valid_ub, buffer, \
     select_extant_crimes = db_cursor.execute(f'''
         SELECT DISTINCT crime 
         FROM crimes 
-        WHERE DATETIME(date) >= DATETIME('{train_lb}') 
+        WHERE DATETIME(date) >= DATETIME('{crime_lb}') 
         AND DATETIME(date) < DATETIME('{train_ub}');
         '''
     )
@@ -246,12 +253,12 @@ def temporal_select(db_con, train_lb, train_ub, valid_lb, valid_ub, buffer, \
             .split()
         )
         crimes_join_queue.append(f'''
-            LEFT JOIN (
+            LEFT JOIN ( 
                 SELECT block, 
                 COUNT(crime) AS crime_{crime_label} 
             FROM crimes 
             WHERE crime = '{extant_crime[0]}' 
-            AND DATETIME(date) >= DATETIME('{lb}') 
+            AND DATETIME(date) >= DATETIME('{crime_lb}') 
             AND DATETIME(date) < DATETIME('{ub}') 
             GROUP BY block 
             ) AS C_{crime_label} USING (block) 
@@ -269,6 +276,12 @@ def temporal_select(db_con, train_lb, train_ub, valid_lb, valid_ub, buffer, \
     crimes = crimes_join_complete.pop()
     for batch in crimes_join_complete:
         crimes = crimes.merge(batch, on="block")
+    # # Convert counts to annual averages.
+    # time_delta = (ub - crime_lb) / np.timedelta64(1, "Y")
+    # for column in crimes.columns:
+    #     if column == "block":
+    #         continue
+    #     crimes[column] = crimes[column].div(time_delta).fillna(0).round()
     # Request and aggregate census data.
     census = pd.read_sql("SELECT * FROM census", db_con)
     census["total_population"] = census["total_male"] + census["total_female"]
