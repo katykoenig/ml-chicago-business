@@ -195,7 +195,6 @@ class Entrepreneurship:
             records = records[records["latitude"] != 'None']
             records = records[records["longitude"] != 'None']
             # Set geometry for spatial join.
-            records = records
             records["the_geom"] = records.apply(
                 lambda x: shapely.geometry.Point(
                     ast.literal_eval(x["longitude"]),
@@ -212,12 +211,11 @@ class Entrepreneurship:
             )
             blocks = gpd.GeoDataFrame(blocks).set_geometry("the_geom")
             # Join records and blocks on intersection of their geometry.
-            columns = list(columns) + ["geoid10"]
+            columns = list(columns) + ["block"]
             records = gpd.sjoin(records, blocks)
             records = records[columns]
         for column in records.columns:
             records[column] = records[column].astype(str)
-        records = records.rename(columns={"geoid10": "block"})
         records.to_sql(table, self.db_con, if_exists="replace", index=False)
 
 
@@ -255,6 +253,7 @@ class Entrepreneurship:
             CENSUS_COLUMNS.get(column, column)
             for column in records.columns
         ]
+        records["ACS_year"] = year
         records.to_sql("census", self.db_con, if_exists="replace", index=False)
 
 

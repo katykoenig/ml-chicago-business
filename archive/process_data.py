@@ -95,31 +95,59 @@ def clean_types(dataframe, date_cols=DATE_LST):
         dataframe[d_col] = pd.to_datetime(dataframe[d_col], infer_datetime_format=True, errors='coerce')
     drop_lst = []
     for column in dataframe.columns: 
-        if 'total' in column: 
+        if 'crime' in column: 
             drop_lst.append(column)
-    census = process_census()
-    joined = pd.merge(dataframe, census, on='block_group')
-    joined.drop(columns=['block'], inplace=True)
-    joined.fillna(0, inplace=True)
-    return joined.loc[:, ~joined.columns.isin(drop_lst)]
+        if 'license' in column:
+            drop_lst.append(column)
+    dataframe.fillna(0, inplace=True)
+    dataframe = dataframe.drop(drop_lst, axis=1)
+    dataframe['census_tract'] = dataframe['block_group'].str[:11]
+    return dataframe
 
 
 
+CRIMES_LS = ['HOMICIDE', 'OTHER OFFENSE', 'ROBBERY', 'THEFT', 'NARCOTICS',
+       'BATTERY', 'ASSAULT', 'CRIMINAL DAMAGE', 'CRIMINAL TRESPASS',
+       'PUBLIC PEACE VIOLATION', 'MOTOR VEHICLE THEFT',
+       'DECEPTIVE PRACTICE', 'WEAPONS VIOLATION',
+       'INTERFERENCE WITH PUBLIC OFFICER', 'BURGLARY',
+       'CRIM SEXUAL ASSAULT', 'OFFENSE INVOLVING CHILDREN',
+       'PUBLIC INDECENCY', 'SEX OFFENSE', 'KIDNAPPING', 'PROSTITUTION',
+       'INTIMIDATION', 'ARSON', 'LIQUOR LAW VIOLATION',
+       'CONCEALED CARRY LICENSE VIOLATION', 'GAMBLING',
+       'OTHER NARCOTIC VIOLATION', 'STALKING', 'OBSCENITY',
+       'HUMAN TRAFFICKING', 'NON-CRIMINAL',
+       'NON-CRIMINAL (SUBJECT SPECIFIED)', 'NON - CRIMINAL']
 
+def crime_stats_for_date_range(crimes, start, end):
+    small = crimes[(crimes['Date'] >= start) & (crimes['Date'] <= end)]
+    grouped = small.groupby('block_group')
+    dic = {}
+    length = (pd.to_datetime(end) - pd.to_datetime(start)).days
 
-
+    for block, df in grouped:
+        tmp = []
+        size = df.shape[0] / length
+        arrests = df[df['Arrest'] == True].shape[0] / length
+        domestic = df[df['Domestic'] == True].shape[0] / length
+        for crime_type in CRIMES_LS:
+            tmp = tmp + [df[df['Primary Type'] == crime_type].shape[0] / length]
+        tmp = tmp + [size, arrests, domestic]
+        dic[str(block).replace('.0', '')] = tmp  
+    cols = CRIMES_LS + ['Total_Crimes', 'Total_Arrests', 'Total_Domestic']
+    return pd.DataFrame.from_dict(dic, orient='index', columns=cols)
 
 
 KEEP_COLS = ['Date', 'Primary Type', 'Latitude', 'Longitude', 'Domestic', 'Arrest']
-def process_crime(blocks_df, date_col, business_df, col_lst=KEEP_COLS):
+def process_crime(blocks_df, date_col, col_lst=KEEP_COLS):
     '''
     '''
     crime_df = pd.read_csv('crimes.csv', parse_dates=['Date'], infer_datetime_format=True, keep_date_col=True)
     crime_df = crime_df[col_lst]
-    start_time = business_df['earliest_issue'].min()
-    end_time = business_df['earliest_issue'].max()
-    crime_df = crime_df[(crime_df['Date'] >= start_time) \
-                            & (crime_df['Date'] <= end_time)]
+    #start_time = business_df['earliest_issue'].min()
+    #end_time = business_df['earliest_issue'].max()
+    #crime_df = crime_df[(crime_df['Date'] >= start_time) \
+    #                        & (crime_df['Date'] <= end_time)]
     crime_df.dropna(subset=['Latitude', 'Longitude'], inplace=True)
     blocks_df = gpd.GeoDataFrame(blocks_df, geometry='the_geom')
     crime_df["the_geom"] = crime_df.apply(lambda row: Point(float(row["Longitude"]), float(row["Latitude"])), axis=1)
@@ -134,16 +162,19 @@ def process_crime(blocks_df, date_col, business_df, col_lst=KEEP_COLS):
     # Combines 3 grouped dataframes
     combined = pd.merge(type_pct, means, on='block_group')
     combined = combined.loc[:, ~combined.columns.isin(['Latitude', 'Longitude', 'Date'])]
-    # Merge w/ business df
-    combined = pd.merge(combined, business_df, right_on='block_group', left_on='block')
-    # Merge w/ census
-    census = process_census()
-    total_df = pd.merge(combined, census, on='block_group')
+
     total_df.drop(columns='block', inplace=True)
     return total_df
 
 
+def add_crimes(train_df, test_df, train_name, test_name):
+    trainsplt = train_name.split('_')[1:]
+    testsplt = test_name.split('_')[1:]
+    crimes = pd.read_csv('data/reduced_crimes.csv', parse_dates=['Date'], infer_datetime_format=True, keep_date_col=True)
+    train_crimes = crime_stats_for_date_range(crimes, pd.to_datetime(trainsplt[0]) - pd.Timedelta('365 d'), pd.to_datetime(trainsplt[1][:-4]))
+    test_crimes = crime_stats_for_date_range(crimes, pd.to_datetime(testsplt[0]) - pd.Timedelta('365 d'), pd.to_datetime(testsplt[1][:-4]))
 
+    return train_df.merge(train_crimes, left_on='block_group', right_index=True), test_df.merge(test_crimes, left_on='block_group', right_index=True)
 
 
 

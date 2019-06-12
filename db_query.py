@@ -164,7 +164,10 @@ def request_storefronts(db_con, lb, ub, buffer):
     JOIN storefronts_blocks USING (block) 
     WHERE last_location = 1;
     '''
-    return pd.read_sql(select_storefronts, db_con)
+    storefronts = pd.read_sql(select_storefronts, db_con)
+    # Coerce block column as integer.
+    storefronts["block"] = storefronts["block"].astype(int)
+    return storefronts
 
 
 def request_licenses(db_con, lb, ub, train_lb, train_ub):
@@ -320,13 +323,16 @@ def request_crimes(db_con, lb, ub, train_lb, train_ub):
         "avg_" + str(column)
         for column in crimes_avg.columns
     ]
-    return pd.concat([crimes["block"], crimes_avg], axis=1).fillna(0)
+    crimes_complete = pd.concat([crimes["block"], crimes_avg], axis=1).fillna(0)
+    # Coerce block column as integer.
+    crimes_complete["block"] = crimes_complete["block"].astype(int)
+    return crimes_complete
 
 
 def request_census(db_con):
 
     # Request and aggregate census data.
-    select_census = f"SELECT * FROM census WHERE end_year = '{ACS_FIVE_YEAR}';"
+    select_census = f"SELECT * FROM census WHERE ACS_year = '{ACS_FIVE_YEAR}';"
     census = pd.read_sql(select_census, db_con)
     census["total_population"] = census["total_male"] + census["total_female"]
     aggregations = {
@@ -434,16 +440,21 @@ def request_census(db_con):
         "pct_asian": ("race_respondents", ["race_asian"]),
         "pct_hispanic": ("race_respondents", ["race_hispanic"])
     }
-    columns_to_drop = ["start_year", "end_year"]
+    columns_to_drop = ["ACS_year"]
     for aggregation, columns in aggregations.items():
         denominator, numerators = columns
-        census[aggregation] = census[numerators] \
+        census[aggregation] = census[numerators].astype(float) \
             .agg("sum", axis=1) \
-            .div(census[denominator]) \
+            .div(census[denominator].astype(float)) \
             .fillna(0)
         columns_to_drop.extend(numerators)
         columns_to_drop.append(denominator)
-    return census.drop(columns=list(set(columns_to_drop)))
+    census = census.drop(columns=list(set(columns_to_drop)))
+    # Coerce block group column as integer.
+    census["block_group"] = census["block_group"].astype(int)
+    # Infer census tract from block group.
+    census["census_tract"] = census["block_group"].floordiv(10)
+    return census
 
 
 if __name__ == "__main__":

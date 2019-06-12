@@ -50,6 +50,7 @@ def aq_analyze(arguments):
         "pct_white": None,
         "pct_high_income": None
     }
+    base_comparison_label = "_".join(base_comparison.keys())
     # Preprocess outside of Aequitas because preprocess_input_df() doesn't work.
     for column in valid_set.columns:
         if column == "score":
@@ -79,13 +80,13 @@ def aq_analyze(arguments):
     # Calculate crosstabs by distinct group.
     crosstabs, _ = aqg.get_crosstabs(
         df=valid_set,
-        score_thresholds={"score": [arguments.threshold]}
+        score_thresholds={"score": [float(arguments.threshold)]}
     )
     absolute_metrics = aqg.list_absolute_metrics(crosstabs)
     crosstabs[["attribute_name", "attribute_value"] + absolute_metrics] \
         .round(2) \
         .to_csv(directory + "/aequitas_crosstabs.csv", index=False)
-    # Calculate and plot bias with respect to white, high income communities.
+    # Plot bias and fairness with respect to white, high income communities.
     disparity_white_hiinc = aqb.get_disparity_predefined_groups(
         crosstabs.loc[crosstabs["attribute_name"].isin(base_comparison.keys())],
         valid_set, base_comparison
@@ -95,14 +96,15 @@ def aq_analyze(arguments):
         metrics=METRICS,
         show_figure=False
     )
-    a.savefig(directory + "/bias_ref_white_high_income.png")
-    # Calculate and plot fairness with respect to the same.
+    a_filename = "bias_ref_" + base_comparison_label + ".png"
+    a.savefig(directory + "/" + a_filename)
     b = aqp.plot_fairness_disparity_all(
         aqf.get_group_value_fairness(disparity_white_hiinc),
         metrics=METRICS,
         show_figure=False
     )
-    b.savefig(directory + "/fairness_ref_white_high_income.png")
+    b_filename = "fairness_ref_" + base_comparison_label + ".png"
+    b.savefig(directory + "/" + b_filename)
 
 
 if __name__ == "__main__":
@@ -122,7 +124,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--threshold",
-        default=0.8,
+        default=0.8207,
         help="Threshold at which to assign scores to the positive class.",
         dest="threshold"
     )
