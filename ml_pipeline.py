@@ -32,15 +32,12 @@ from db_query import temporal_select
 
 
 TEMPORAL_SPLITS = [
-    ("2010-01-01", "2015-06-01", "2017-06-01", "2017-06-02")
+    ("2010-01-01", "2015-06-01", "2017-06-01", "2017-06-02"),
+    ("2010-01-01", "2014-06-01", "2016-06-01", "2016-06-02"),
+    ("2010-01-01", "2013-06-01", "2015-06-01", "2015-06-02"),
+    ("2010-01-01", "2012-06-01", "2014-06-01", "2014-06-02")
 ]
-
-# TEMPORAL_SPLITS = [
-#     ("2010-01-01", "2015-06-01", "2017-06-01", "2017-06-02"),
-#     ("2010-01-01", "2014-06-01", "2016-06-01", "2016-06-02"),
-#     ("2010-01-01", "2013-06-01", "2015-06-01", "2015-06-02"),
-#     ("2010-01-01", "2012-06-01", "2014-06-01", "2014-06-02")
-# ]
+TARGET_VARIABLE = "successful"
 RESERVED_COLUMNS = [
     "sf_id",
     "block",
@@ -100,8 +97,9 @@ CLASSIFIERS = {
     "gradient_boost": GradientBoostingClassifier(),
     "bagging": BaggingClassifier(DecisionTreeClassifier(max_depth=5))
 }
-RESULTS_COLUMNS = [
+EVALUATION_COLUMNS = [
     "model", "parameters", "test_baseline",
+    "train_lbound", "train_ubound", "valid_lbound", "valid_ubound",
     "accuracy_at_1", "precision_at_1", "recall_at_1", "f1_score_at_1",
     "accuracy_at_2", "precision_at_2", "recall_at_2", "f1_score_at_2",
     "accuracy_at_5", "precision_at_5", "recall_at_5", "f1_score_at_5", 
@@ -133,28 +131,40 @@ def run_pipeline(arguments):
         ]
         # Split train, valid sets into independent, dependent variable sets.
         X_train = train_set[features_list]
-        y_train = train_set[arguments.target]
+        y_train = train_set[TARGET_VARIABLE]
         X_valid = valid_set[features_list]
-        y_valid = valid_set[arguments.target]
+        y_valid = valid_set[TARGET_VARIABLE]
         data = X_train, y_train, X_valid, y_valid
         # Generate and evaluate models.
-        results = generate_models(*data, models, THRESHOLDS)
-        # Save results to CSV with temporal bounds for train, valid sets.
-        train_lb, train_ub, valid_lb, valid_ub = temporal_split
-        results["train_start"] = train_lb
-        results["train_end"] = train_ub
-        results["valid_start"] = valid_lb
-        results["valid_end"] = valid_ub
-        filename = "_".join([valid_lb, valid_ub, str(pd.Timestamp.now())])
-        results.to_csv(filename + ".csv")
+        evaluations = generate_models(
+            *data, *temporal_split, models, THRESHOLDS
+        )
+        valid_lb, valid_ub = temporal_split[2:]
+        filename = "_".join(["evaluation", "valid", valid_lb, valid_ub]) + ".csv"
+        evaluations.to_csv(filename, index=False)
         # Report top performing models on each evaluation metric.
-        report_best_models(*data, valid_lb, results, EVALUATION_METRICS)
+        report_best_models(
+            *data, valid_lb, valid_ub, evaluations, EVALUATION_METRICS
+        )
         # Report feature importance.
         report_feature_importance(X_train, y_train)
 
 
 def request_train_valid_sets(train_lb, train_ub, valid_lb, valid_ub):
 
+    '''
+    Identify the appropriate train, valid set CSV files by date range
+    per standard filenaming convention.
+
+    train_lb (datetime): training set temporal lower bound inclusive.
+    train_ub (datetime): training set temporal upper bound exclusive.
+    valid_lb (datetime): validation set temporal lower bound inclusive.
+    valid_ub (datetime): validation set temporal upper bound exclusive.
+
+    Return train, valid sets (DatFrame, DataFrame)
+
+    '''
+    
     # Collect train, valid sets from CSV per standard naming convention.
     train_set_filename = "_".join(["train", train_lb, train_ub]) + ".csv"
     valid_set_filename = "_".join(["valid", valid_lb, valid_ub]) + ".csv"
@@ -172,7 +182,8 @@ def postprocess_data(dataframe):
     return dataframe
 
 
-def generate_models(X_train, y_train, X_valid, y_valid, models, thresholds):
+def generate_models(X_train, y_train, X_valid, y_valid, train_lb, train_ub, \
+    valid_lb, valid_ub, models, thresholds):
 
     '''
     Generate models for a temporal set and evaluate and several thresholds.
@@ -183,14 +194,18 @@ def generate_models(X_train, y_train, X_valid, y_valid, models, thresholds):
     y_train (DataFrame): target variable of training set.
     X_valid (DataFrame): features of which to validate the model.
     y_valid (DataFrame): target variable of the validation set.
+    train_lb (datetime): training set temporal lower bound inclusive.
+    train_ub (datetime): training set temporal upper bound exclusive.
+    valid_lb (datetime): validation set temporal lower bound inclusive.
+    valid_ub (datetime): validation set temporal upper bound exclusive.
     models (list): representation of models to run.
     thresholds (list): representation of percentiles at which to evaluate.
 
-    Return results (DataFrame)
+    Return evaluation (DataFrame)
 
     '''
 
-    results_df = pd.DataFrame(columns=RESULTS_COLUMNS)
+    evaluations = pd.DataFrame(columns=EVALUATION_COLUMNS)
     best_auc = 0.0
     best_model = []
     for model in models:
@@ -199,7 +214,10 @@ def generate_models(X_train, y_train, X_valid, y_valid, models, thresholds):
         parameters_to_run = PARAMS_DICT[model]
         # Loop through varying paramets for each model
         for parameters in ParameterGrid(parameters_to_run):
-            row_lst = [model, parameters, np.mean(y_valid)]
+            constants = [
+                model, parameters, np.mean(y_valid), 
+                train_lb, train_ub, valid_lb, valid_ub
+            ]
             classifier.set_params(**parameters)
             classifier.fit(X_train, y_train)
             y_proba = classifier.predict_proba(X_valid)[:, 1]
@@ -217,40 +235,43 @@ def generate_models(X_train, y_train, X_valid, y_valid, models, thresholds):
                     f1_score(y_valid, y_predi)
                 ])
             auc_roc = roc_auc_score(y_valid, y_proba)
-            # Write evaluation to results dataframe.
-            results_df.loc[len(results_df)] = row_lst + metrics + [auc_roc]
+            # Write to evaluation dataframe.
+            evaluations.loc[len(evaluations)] = constants + metrics + [auc_roc]
             if auc_roc > best_auc:
                 best_auc = auc_roc
+                y_proba = pd.Series(y_proba, name="score")
                 best_model = [X_valid, y_valid, y_proba]
     # Write validation set and scores from the best model to CSV.
-    pd.concat(best_model).to_csv("predscores.csv", index=False)
-    return results_df
+    filename = "_".join(["results", "valid", valid_lb, valid_ub]) + ".csv"
+    pd.concat(best_model, axis=1).to_csv(filename, index=False)
+    return evaluations
 
 
-def report_best_models(X_train, y_train, X_valid, y_valid, valid_lb, results, \
-    metrics):
+def report_best_models(X_train, y_train, X_valid, y_valid, valid_lb, valid_ub, \
+    evaluations, metrics):
 
     '''
     Report the best performing models on the metrics given for consideration.
-    Print the results to screen and plot its precision-recall and ROC curves.
+    Print the evaluations to screen and plot its precision-recall and ROC curves.
 
     X_train (DataFrame): features on which to train the model.
     y_train (DataFrame): target variable of training set.
     X_valid (DataFrame): features of which to validate the model.
     y_valid (DataFrame): target variable of the validation set.
-    valid_lb (str): representation of the lower bound of the validation set.
-    results (DataFrame): results from generate_models().
+    valid_lb (datetime): validation set temporal lower bound inclusive.
+    valid_ub (datetime): validation set temporal upper bound exclusive.
+    evaluations (DataFrame): evaluations from generate_models().
     metrics (list): representation of metrics to consider
 
     '''
 
     for metric in metrics:
         print("BEST MODEL FOR " + metric.upper())
-        best_index = results[metric].idxmax()
-        best_series = results.loc[best_index]
+        best_index = evaluations[metric].idxmax()
+        best_series = evaluations.loc[best_index]
         print(best_series[SUMMARY_COLUMNS])
         create_curves(
-            best_series["model"], best_series["params"], 
+            best_series["model"], best_series["parameters"], 
             X_train, y_train, X_valid, y_valid, valid_lb
         )
 
@@ -274,19 +295,20 @@ def report_feature_importance(X_train, y_train):
             print(feataure_importance[i], X_train.columns[i])
     
 
-def create_curves(model, params, X_train, y_train, X_valid, y_valid, date, \
+def create_curves(model, params, X_train, y_train, X_valid, y_valid, valid_lb, \
     threshold=5):
     '''
     Prints area under the curve and creates and saves an ROC and
     precision-recall curves image.
-    Inputs:
-        model: name of machine learning classifer
-        params: params for classifier to run
-        x_train: pandas dataframe with only features columns of training data
-        X_valid: pandas dataframe with only features columns of testing data
-        y_train: pandas series with outcome column of training data
-        y_valid: pandas series with outcome column of testing data
-    Outputs: None
+
+    model: name of machine learning classifer
+    params: params for classifier to run
+    x_train: pandas dataframe with only features columns of training data
+    X_valid: pandas dataframe with only features columns of testing data
+    y_train: pandas series with outcome column of training data
+    y_valid: pandas series with outcome column of testing data
+    valid_lb (datetime): validation set temporal lower bound inclusive.
+
     '''
     classifier = CLASSIFIERS[model]
     try:
@@ -304,16 +326,16 @@ def create_curves(model, params, X_train, y_train, X_valid, y_valid, date, \
     fpr, tpr, _ = roc_curve(y_valid, y_proba)
     plt.plot([0, 1], [0, 1], linestyle="--")
     plt.plot(fpr, tpr, marker=".")
-    roc_title = "ROC " + model + " with " + str(params) + date
+    roc_title = "ROC " + model + " with " + str(params) + valid_lb
     plt.savefig(roc_title + ".png")
     plt.clf()
-    plot_precision_recall_n(model, params, y_valid, y_predi, date)
+    plot_precision_recall_n(model, params, y_valid, y_predi, valid_lb)
 
 
 # The code below comes from Rayid Ghani's magic loop, found here:
 # https://github.com/rayidghani/magicloops
 
-def plot_precision_recall_n(model, params, y_true, y_score, date):
+def plot_precision_recall_n(model, params, y_true, y_score, valid_lb):
     '''
     Plots and saves precision-recall curve for a given model
     Inputs:
@@ -347,7 +369,7 @@ def plot_precision_recall_n(model, params, y_true, y_score, date):
     ax1.set_ylim([0, 1])
     ax1.set_ylim([0, 1])
     ax2.set_xlim([0, 1])
-    p_r_title = "Precision-Recall " + model + " with " + str(params) + date
+    p_r_title = "Precision-Recall " + model + " with " + str(params) + valid_lb
     plt.savefig(p_r_title + ".png")
     plt.clf()
 
@@ -358,7 +380,7 @@ def plot_precision_recall_n(model, params, y_true, y_score, date):
     plt.plot(fpr, tpr, marker=".")
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
-    roc_title = "ROC " + model + " with " + str(params) + date
+    roc_title = "ROC " + model + " with " + str(params) + valid_lb
     plt.title("ROC")
     plt.savefig(roc_title + ".png")
     plt.clf()
@@ -368,11 +390,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
         description="Run the Chicago Entrepreneurship database."
-    )
-    parser.add_argument(
-        "--target",
-        help="Target variable on which to model.",
-        dest="target"
     )
     parser.add_argument(
         "--model",
