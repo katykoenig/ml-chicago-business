@@ -10,6 +10,8 @@ f1_score_at_5     0.102018
 recall_at_5       0.054682
 auc_roc           0.525877
 Name: 61, dtype: object
+{'weights': 'distance', 'n_neighbors': 50}
+
 0.1948815790757881 storefronts_on_block
 0.01621416689127304 police_district
 0.0493339331730308 pct_medium_travel_time
@@ -36,6 +38,9 @@ f1_score_at_5      0.103184
 recall_at_5       0.0552929
 auc_roc            0.522634
 Name: 61, dtype: object
+{'weights': 'distance', 'n_neighbors': 50}
+
+
 0.22747386243636206 storefronts_on_block
 0.03559735800655597 police_district
 0.12864758980404808 block_group
@@ -61,6 +66,8 @@ f1_score_at_5         0.0973071
 recall_at_5           0.0522843
 auc_roc                0.526554
 Name: 18, dtype: object
+{'n_jobs': -1, 'max_depth': 1, 'n_estimators': 10, 'min_samples_split': 2}
+
 0.2033889245880266 storefronts_on_block
 0.035891309097612005 police_district
 0.04786270494904698 block_group
@@ -77,6 +84,7 @@ Name: 18, dtype: object
 0.018457222658087673 GAMBLING
 0.23841540885273052 month_issue
 
+
 writing results for data/valid_2017-05-31_2017-06-01.csv
 BEST MODEL FOR auc_roc
 model             random_forest
@@ -86,6 +94,9 @@ f1_score_at_5         0.0962287
 recall_at_5           0.0521249
 auc_roc                0.528473
 Name: 26, dtype: object
+{'n_jobs': -1, 'max_depth': 1, 'n_estimators': 10, 'min_samples_split': 10}
+
+
 0.1547413330639465 storefronts_on_block
 0.0406427375423391 police_district
 0.01507980953859365 block_group
