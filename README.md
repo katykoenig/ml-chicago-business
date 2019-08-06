@@ -3,7 +3,7 @@ Machine Learning for Public Policy
 University of Chicago, CS & Harris School of Public Policy
 
 ## Collaborators
-* Dr. Rayid Ghani (@rayidghani)
+* Prof. Rayid Ghani (@rayidghani)
 * Katy Koenig (@katykoenig)
 * Eric Langowski (@erhla)
 * Patrick Lavallee Delgado (@lavalleedelgado)
